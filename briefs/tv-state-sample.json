@@ -1,0 +1,172 @@
+{
+    "version": 47,
+    "updated_at": 1792249891,
+    "members": [
+        {
+            "name": "Bedirhan",
+            "age": null,
+            "kid": false,
+            "loves": [
+                "Science Fiction"
+            ],
+            "likes": [],
+            "dislikes": [],
+            "never": [],
+            "watched": [
+                "Back to the Future",
+                "Inception"
+            ],
+            "notes": [],
+            "new": false
+        },
+        {
+            "name": "Ayse",
+            "age": null,
+            "kid": false,
+            "loves": [
+                "Comedy"
+            ],
+            "likes": [],
+            "dislikes": [
+                "Horror"
+            ],
+            "never": [
+                "Horror"
+            ],
+            "watched": [
+                "Back to the Future",
+                "Deadpool & Wolverine",
+                "Inception"
+            ],
+            "notes": [],
+            "new": false
+        }
+    ],
+    "screen": "recommendations",
+    "message": "Saved: Inception",
+    "recommendations": [
+        {
+            "id": 1327819,
+            "title": "Hoppers",
+            "year": "2026",
+            "genres": [
+                "Adventure",
+                "Animation",
+                "Comedy",
+                "Family",
+                "Science Fiction"
+            ],
+            "genre_ids": [
+                12,
+                16,
+                35,
+                10751,
+                878
+            ],
+            "rating": 8.1,
+            "overview": "Scientists have discovered how to 'hop' human consciousness into lifelike robotic animals, allowing people to communicate with animals as animals. Animal lover Mabel seizes an opportunity to use the technology, uncovering mysteries...",
+            "poster": "https://image.tmdb.org/t/p/w342/xjtWQ2CL1mpmMNwuU5HeS4Iuwuu.jpg",
+            "match": 88,
+            "why": "Bedirhan loves science fiction \u00b7 Ayse loves comedy"
+        },
+        {
+            "id": 20352,
+            "title": "Despicable Me",
+            "year": "2010",
+            "genres": [
+                "Animation",
+                "Comedy",
+                "Crime",
+                "Science Fiction",
+                "Family"
+            ],
+            "genre_ids": [
+                16,
+                35,
+                80,
+                878,
+                10751
+            ],
+            "rating": 7.3,
+            "overview": "Determined to prove he's the world's greatest supervillain, Gru hatches an audacious plan to steal the Moon. To pull it off, he adopts three orphaned girls\u2014Margo, Edith, and Agnes\u2014intending to use them as pawns in his scheme. But the...",
+            "poster": "https://image.tmdb.org/t/p/w342/b1BT309QWjtFUlJPLmXmrcHOWEL.jpg",
+            "match": 86,
+            "why": "Bedirhan loves science fiction \u00b7 Ayse loves comedy"
+        },
+        {
+            "id": 1377237,
+            "title": "Runner",
+            "year": "2026",
+            "genres": [
+                "Action",
+                "Comedy"
+            ],
+            "genre_ids": [
+                28,
+                35
+            ],
+            "rating": 8.3,
+            "overview": "A former soldier is thrown into a brutal race against time when a critical medical delivery makes him and his unlikely partner the targets of a ruthless cartel. As the mission spirals into a deadly manhunt, every detour, delay, and...",
+            "poster": "https://image.tmdb.org/t/p/w342/yBKMAIj7clP42UkFejhGDBBoTpb.jpg",
+            "match": 84,
+            "why": "Ayse loves comedy"
+        },
+        {
+            "id": 1032863,
+            "title": "The Love Hypothesis",
+            "year": "2026",
+            "genres": [
+                "Romance",
+                "Comedy"
+            ],
+            "genre_ids": [
+                10749,
+                35
+            ],
+            "rating": 8.0,
+            "overview": "Olive Smith, a biology PhD candidate, and Dr. Adam Carlsen, a hotshot professor and well-known tyrant, enter into a fake relationship, seeing each of their carefully calculated theories on love get thrown into chaos.",
+            "poster": "https://image.tmdb.org/t/p/w342/vfZxVHextAGC70zrNhS8lsROqP1.jpg",
+            "match": 83,
+            "why": "Ayse loves comedy"
+        },
+        {
+            "id": 1273221,
+            "title": "Scary Movie",
+            "year": "2026",
+            "genres": [
+                "Comedy"
+            ],
+            "genre_ids": [
+                35
+            ],
+            "rating": 6.3,
+            "overview": "Twenty-six years after outrunning a suspiciously familiar masked killer, the Core Four are back in the killer's crosshairs and no horror movie IP is safe.",
+            "poster": "https://image.tmdb.org/t/p/w342/znHT8peERZRWG1ME3r0Db0EV8k8.jpg",
+            "match": 80,
+            "why": "Ayse loves comedy"
+        },
+        {
+            "id": 1248832,
+            "title": "Digger",
+            "year": "2026",
+            "genres": [
+                "Comedy",
+                "Drama"
+            ],
+            "genre_ids": [
+                35,
+                18
+            ],
+            "rating": 7.5,
+            "overview": "The most powerful man in the world embarks on a frantic mission to prove he is humanity's savior before the disaster he's unleashed destroys everything.",
+            "poster": "https://image.tmdb.org/t/p/w342/1ATXKrIPJyKNwnJ6lcG088Sa6zi.jpg",
+            "match": 82,
+            "why": "Ayse loves comedy"
+        }
+    ],
+    "boost": [
+        "comedy"
+    ],
+    "duel": null,
+    "details": null
+}
