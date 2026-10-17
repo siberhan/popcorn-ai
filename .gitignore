@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+build/
+.expo/
+__pycache__/
+*.pyc
+.venv/
+.aws-sam/
+.DS_Store
