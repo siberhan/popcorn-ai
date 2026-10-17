@@ -1,0 +1,142 @@
+:root {
+  /* ==========================================================================
+     Popcorn AI Design Tokens — "Cinema at Home"
+     Shared source of truth for apps/alexa-web and apps/tv (see tokens.json)
+     ========================================================================== */
+
+  /* --- Color Palette: Backgrounds & Surfaces (Deep Velvet Night) --- */
+  --color-bg-canvas: #0D0A08;
+  --color-bg-primary: #0D0A08;
+  --color-bg-elevated: #16110E;
+  --color-bg-surface: #1F1814;
+  --color-bg-surface-hover: #2A201A;
+  --color-bg-surface-active: #342820;
+  --color-bg-glass: rgba(31, 24, 20, 0.78);
+  --color-bg-spotlight: rgba(245, 185, 66, 0.08);
+
+  /* --- Color Palette: Text & Foregrounds (Buttery Cream & Warm Stone) --- */
+  --color-text-primary: #FAF3E8;     /* 16.8:1 on #0D0A08 */
+  --color-text-secondary: #D1C2B0;   /* 10.4:1 on #0D0A08, 8.2:1 on #1F1814 */
+  --color-text-muted: #9E8C78;       /* 5.6:1 on #0D0A08, 4.6:1 on #1F1814 (WCAG AA >= 4.5:1) */
+  --color-text-on-accent: #140E09;   /* 11.9:1 on #F5B942 */
+
+  /* --- Color Palette: Accents (Warm Popcorn Gold & Projector Amber) --- */
+  --color-accent-popcorn: #F5B942;
+  --color-accent-popcorn-hover: #FFCA5C;
+  --color-accent-amber: #E8882D;
+  --color-accent-ember: #D95B26;
+  --color-accent-cream: #FFF1D0;
+
+  /* --- Color Palette: Borders & Dividers --- */
+  --color-border-subtle: #2C221C;
+  --color-border-default: #3D2F26;
+  --color-border-strong: #574336;
+  --color-border-accent: rgba(245, 185, 66, 0.45);
+
+  /* --- Color Palette: Semantic Status --- */
+  --color-status-success: #72C47A;
+  --color-status-success-bg: rgba(114, 196, 122, 0.14);
+  --color-status-warning: #F5B942;
+  --color-status-warning-bg: rgba(245, 185, 66, 0.14);
+  --color-status-error: #E56B55;
+  --color-status-error-bg: rgba(229, 107, 85, 0.16);
+  --color-status-kid-badge: #E8993E;
+  --color-status-kid-badge-bg: rgba(232, 153, 62, 0.18);
+
+  /* --- Color Palette: Voice Orb States (Strict No-Cyan/Blue Rule) --- */
+  --color-orb-idle-core: #2B211B;
+  --color-orb-idle-ring: #6E5239;
+  --color-orb-idle-glow: rgba(245, 185, 66, 0.14);
+
+  --color-orb-listening-core: #F5B942;
+  --color-orb-listening-ring: #FFE299;
+  --color-orb-listening-glow: rgba(245, 185, 66, 0.48);
+
+  --color-orb-thinking-core: #E8882D;
+  --color-orb-thinking-ring: #F5B942;
+  --color-orb-thinking-glow: rgba(232, 136, 45, 0.38);
+
+  --color-orb-speaking-core: #FFF1D0;
+  --color-orb-speaking-ring: #F5B942;
+  --color-orb-speaking-glow: rgba(255, 241, 208, 0.44);
+
+  --color-orb-error-core: #C84B31;
+  --color-orb-error-ring: #E56B55;
+  --color-orb-error-glow: rgba(229, 107, 85, 0.42);
+
+  /* --- Color Palette: Deterministic Person Avatars (Warm Cinema Tones) --- */
+  --color-avatar-0: #C85A32; /* Terracotta */
+  --color-avatar-1: #B87D28; /* Ochre Gold */
+  --color-avatar-2: #8E4A49; /* Velvet Burgundy */
+  --color-avatar-3: #5C7A52; /* Olive Sage */
+  --color-avatar-4: #9E6240; /* Cinnamon */
+  --color-avatar-5: #7A5475; /* Plum Dusk */
+  --color-avatar-6: #A8423F; /* Carmine */
+  --color-avatar-7: #6F6A42; /* Antique Brass */
+
+  /* --- Typography (Google Fonts: 1 Display + 1 Text Face) --- */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Type Scale (Living-room & TV legible) */
+  --font-size-xs: 0.75rem;     /* 12px */
+  --font-size-sm: 0.875rem;    /* 14px */
+  --font-size-md: 1rem;        /* 16px */
+  --font-size-lg: 1.125rem;    /* 18px */
+  --font-size-xl: 1.375rem;    /* 22px */
+  --font-size-2xl: 1.75rem;    /* 28px */
+  --font-size-3xl: 2.25rem;    /* 36px */
+  --font-size-4xl: 3rem;       /* 48px */
+
+  --line-height-tight: 1.15;
+  --line-height-snug: 1.3;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.65;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* --- Spacing Scale (4px base unit) --- */
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;      /* 48px */
+  --space-16: 4rem;      /* 64px */
+
+  /* --- Border Radius --- */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-full: 9999px;
+
+  /* --- Shadows & Cinema Glows --- */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.68);
+  --shadow-glow-idle: 0 0 36px var(--color-orb-idle-glow);
+  --shadow-glow-listening: 0 0 56px var(--color-orb-listening-glow), 0 0 110px rgba(245, 185, 66, 0.22);
+  --shadow-glow-thinking: 0 0 48px var(--color-orb-thinking-glow);
+  --shadow-glow-speaking: 0 0 60px var(--color-orb-speaking-glow), 0 0 120px rgba(245, 185, 66, 0.25);
+  --shadow-glow-error: 0 0 48px var(--color-orb-error-glow);
+  --focus-ring: 0 0 0 3px rgba(245, 185, 66, 0.65);
+
+  /* --- Motion (Durations & Easing) --- */
+  --duration-fast: 140ms;
+  --duration-normal: 240ms;
+  --duration-slow: 420ms;
+  --duration-pulse: 2200ms;
+  --duration-orbit: 3200ms;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}

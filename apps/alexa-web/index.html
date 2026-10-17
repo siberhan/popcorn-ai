@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Popcorn AI — Simulated Alexa+</title>
+  <link
+    rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231F1814'/%3E%3Ccircle cx='16' cy='16' r='9' fill='%23F5B942'/%3E%3C/svg%3E"
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="./design/tokens.css" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="brand-group">
+        <div class="brand-emblem" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="24" height="24" fill="none">
+            <path
+              d="M9.5 13C7.57 13 6 11.43 6 9.5C6 7.72 7.33 6.25 9.05 6.03C9.88 4.24 11.7 3 13.8 3C16.05 3 17.97 4.42 18.7 6.42C19.26 6.15 19.9 6 20.58 6C22.97 6 24.9 7.93 24.9 10.32C24.9 11.41 24.5 12.4 23.83 13.16"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+            />
+            <path
+              d="M7.5 13H24.5L22.4 27.2C22.24 28.24 21.35 29 20.3 29H11.7C10.65 29 9.76 28.24 9.6 27.2L7.5 13Z"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linejoin="round"
+            />
+            <path d="M13 13L13.8 29M19 13L18.2 29" stroke="currentColor" stroke-width="1.8" />
+          </svg>
+        </div>
+        <div class="brand-titles">
+          <h1 class="brand-name">Popcorn AI</h1>
+          <span class="simulated-label">Simulated Alexa+</span>
+        </div>
+        <span id="mode-badge" class="mode-badge" aria-live="polite">Checking agent...</span>
+      </div>
+
+      <div class="header-controls">
+        <div class="speaker-field">
+          <label for="speaker-input" class="speaker-label">Who is talking?</label>
+          <div class="speaker-input-wrap">
+            <span id="speaker-avatar" class="avatar-circle avatar-sm" aria-hidden="true">BE</span>
+            <input
+              id="speaker-input"
+              type="text"
+              class="speaker-input"
+              placeholder="Your name"
+              value="Bedirhan"
+              maxlength="32"
+              aria-label="Who is talking?"
+            />
+          </div>
+        </div>
+
+        <button id="new-night-btn" type="button" class="btn-secondary" title="Reset conversation for a new movie night">
+          <svg viewBox="0 0 20 20" width="15" height="15" fill="none" aria-hidden="true">
+            <path
+              d="M3.5 10A6.5 6.5 0 0 1 15.3 6.2M16.5 10A6.5 6.5 0 0 1 4.7 13.8"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+            <path d="M15.5 3V6.5H12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M4.5 17V13.5H8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>New night</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main 2-Column Cinema Layout -->
+    <main class="workspace">
+      <!-- Left Column: Voice Orb + Live Transcript + Conversation + Composer -->
+      <section class="voice-column" aria-label="Voice interaction and conversation">
+        <!-- Voice Orb Stage -->
+        <div class="orb-stage" id="orb-stage">
+          <div class="orb-top-meta">
+            <span id="orb-state-pill" class="orb-state-pill" data-state="idle">Ready to listen</span>
+            <span id="conversation-id-pill" class="conversation-id-pill">Session: new night</span>
+          </div>
+
+          <div class="orb-wrapper">
+            <div class="orb-ring orb-ring-outer" id="orb-ring-outer" aria-hidden="true"></div>
+            <div class="orb-ring orb-ring-mid" id="orb-ring-mid" aria-hidden="true"></div>
+            <div class="orb-ring orb-ring-orbit" aria-hidden="true"></div>
+
+            <button
+              id="voice-orb"
+              type="button"
+              class="voice-orb"
+              data-state="idle"
+              aria-label="Voice control orb. Tap to talk or hold Space bar."
+              aria-pressed="false"
+            >
+              <!-- Idle / Listening Mic Icon -->
+              <svg class="orb-icon orb-icon-mic" viewBox="0 0 32 32" width="38" height="38" fill="none" aria-hidden="true">
+                <rect x="11" y="4" width="10" height="16" rx="5" stroke="currentColor" stroke-width="2.4" />
+                <path
+                  d="M6.5 15.5C6.5 20.75 10.75 25 16 25C21.25 25 25.5 20.75 25.5 15.5"
+                  stroke="currentColor"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                />
+                <path d="M16 25V29M11.5 29H20.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+              </svg>
+
+              <!-- Thinking Icon -->
+              <svg class="orb-icon orb-icon-thinking" viewBox="0 0 32 32" width="38" height="38" fill="none" aria-hidden="true">
+                <circle cx="16" cy="16" r="10" stroke="currentColor" stroke-width="2.4" stroke-dasharray="14 8" />
+                <circle cx="16" cy="16" r="3.5" fill="currentColor" />
+              </svg>
+
+              <!-- Speaking Equalizer Bars -->
+              <div class="orb-icon orb-icon-speaking" aria-hidden="true">
+                <span class="eq-bar eq-bar-1"></span>
+                <span class="eq-bar eq-bar-2"></span>
+                <span class="eq-bar eq-bar-3"></span>
+                <span class="eq-bar eq-bar-4"></span>
+                <span class="eq-bar eq-bar-5"></span>
+              </div>
+
+              <!-- Error Icon -->
+              <svg class="orb-icon orb-icon-error" viewBox="0 0 32 32" width="38" height="38" fill="none" aria-hidden="true">
+                <path
+                  d="M16 6L28 26H4L16 6Z"
+                  stroke="currentColor"
+                  stroke-width="2.4"
+                  stroke-linejoin="round"
+                />
+                <path d="M16 14V19" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+                <circle cx="16" cy="22.8" r="1.4" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+
+          <p id="orb-hint" class="orb-hint">
+            Tap the orb or hold <kbd>Space</kbd> to speak · Say <em>"Hey Popcorn, it's me and Ayse tonight"</em>
+          </p>
+
+          <!-- Live Interim Transcript Box -->
+          <div id="live-transcript-bar" class="live-transcript-bar" aria-live="polite">
+            <span class="transcript-label" id="transcript-label">Live mic</span>
+            <span id="live-transcript-text" class="live-transcript-text">
+              Waiting for voice or typed input...
+            </span>
+          </div>
+
+          <!-- Error Banner -->
+          <div id="error-banner" class="error-banner" role="alert" hidden>
+            <span id="error-banner-text" class="error-banner-text"></span>
+            <button id="error-dismiss-btn" type="button" class="error-dismiss-btn">Dismiss</button>
+          </div>
+        </div>
+
+        <!-- Conversation Panel -->
+        <div class="conversation-card">
+          <div class="conversation-header">
+            <h2 class="section-title">Conversation</h2>
+            <div class="quick-prompts" id="quick-prompts" aria-label="Sample voice commands">
+              <button
+                type="button"
+                class="prompt-chip"
+                data-prompt="Hey Popcorn, it's me, Ayse, and 9-year-old Can tonight. Find something funny for all of us."
+              >
+                Family couch + picks
+              </button>
+              <button
+                type="button"
+                class="prompt-chip"
+                data-prompt="Alexa, Ayse is new — start a poster duel on the TV"
+              >
+                Poster duel
+              </button>
+              <button
+                type="button"
+                class="prompt-chip"
+                data-prompt="Popcorn, give me a detailed breakdown of why these movies fit everyone on the couch tonight"
+              >
+                Long reply
+              </button>
+              <button
+                type="button"
+                class="prompt-chip prompt-chip-danger"
+                data-prompt="Simulate error"
+                id="chip-simulate-error"
+              >
+                Test error
+              </button>
+            </div>
+          </div>
+
+          <div id="chat-log" class="chat-log" role="log" aria-live="polite">
+            <div class="chat-empty" id="chat-empty">
+              <p class="chat-empty-title">Who is on the couch tonight?</p>
+              <p class="chat-empty-sub">
+                Tell Popcorn AI who is watching and what mood you are in. Wake words like
+                <strong>"Hey Popcorn"</strong> or <strong>"Alexa"</strong> are stripped automatically.
+              </p>
+            </div>
+          </div>
+
+          <!-- Speech Recognition Support Note (shown only when unsupported or blocked) -->
+          <div id="speech-note" class="speech-note" hidden>
+            Voice recognition is unavailable in this browser context. Using text input below.
+          </div>
+
+          <!-- Text Fallback Input -->
+          <form id="composer-form" class="composer-form" autocomplete="off">
+            <input
+              id="composer-input"
+              type="text"
+              class="composer-input"
+              placeholder="Type instead of speaking (e.g. 'Hey Popcorn, it's me and Ayse tonight')..."
+              aria-label="Message to Popcorn AI"
+            />
+            <button id="composer-send" type="submit" class="btn-primary">
+              <span>Send</span>
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" aria-hidden="true">
+                <path
+                  d="M4 10H16M16 10L11 5M16 10L11 15"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Right Column: Agent at Work + Living Room TV Preview -->
+      <aside class="inspector-column" aria-label="Agent tool execution and TV screen preview">
+        <!-- Agent at Work Panel -->
+        <section class="panel agent-panel" aria-labelledby="agent-panel-title">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <span class="panel-indicator" id="agent-panel-dot"></span>
+              <h2 id="agent-panel-title" class="section-title">Agent at work</h2>
+            </div>
+            <span id="agent-step-summary" class="panel-meta">Idle</span>
+          </div>
+
+          <ul id="tool-steps-list" class="tool-steps-list" aria-live="polite">
+            <li class="tool-steps-empty" id="tool-steps-empty">
+              MCP tool calls (<code class="inline-code">set_couch</code>,
+              <code class="inline-code">recommend_for_couch</code>,
+              <code class="inline-code">start_duel</code>) appear here live as the agent works.
+            </li>
+          </ul>
+        </section>
+
+        <!-- TV Preview Card -->
+        <section class="panel tv-panel" aria-labelledby="tv-panel-title">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" class="tv-icon" aria-hidden="true">
+                <rect x="2" y="3.5" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.8" />
+                <path d="M7 17.5H13M10 14.5V17.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+              <h2 id="tv-panel-title" class="section-title">TV preview</h2>
+            </div>
+            <div class="tv-badges">
+              <span id="tv-kid-badge" class="tv-kid-filter-badge" hidden>PG Kid-Safe</span>
+              <span id="tv-screen-pill" class="tv-screen-pill">COUCH</span>
+            </div>
+          </div>
+
+          <!-- Couch Members Bar -->
+          <div class="tv-couch-bar" id="tv-couch-bar" aria-label="People on the couch">
+            <span class="tv-couch-empty">Couch is empty — say who is watching tonight</span>
+          </div>
+
+          <!-- TV Screen Content -->
+          <div class="tv-screen-viewport" id="tv-screen-viewport">
+            <div class="tv-placeholder">
+              <p class="tv-placeholder-title">Ready for Movie Night</p>
+              <p class="tv-placeholder-sub">Picks and poster duels will appear here immediately.</p>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
