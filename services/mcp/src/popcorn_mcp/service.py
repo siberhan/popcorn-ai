@@ -189,15 +189,26 @@ class Popcorn:
         return result
 
     async def _after_couch_change(self, state: dict, created: list[str], message: str) -> dict:
-        """Refresh recommendations if the TV is showing them, so changes appear live."""
+        """Refresh recommendations if the TV is showing them, so changes appear live.
+
+        Cards that still fit the new couch keep their slot; only the others are replaced.
+        """
         if state["screen"] == "recommendations" and state["members"]:
-            before = {r["id"]: r["title"] for r in state["recommendations"]}
-            await self._save_state(state, message=message)
-            recs = await self.recommend(boost_genres=state["boost"], limit=len(before) or 6)
-            after = {r["id"] for r in recs["recommendations"]}
+            before = state["recommendations"]
+            members = await self._members(state)
+            ranked = await self._rank(members, state["boost"], limit=2 * len(before) or 6)
+            fits = await asyncio.gather(*(self._fits(card, members, ranked) for card in before))
+            kept = {card["id"] for card, ok in zip(before, fits) if ok}
+            fresh = iter(r for r in ranked["recommendations"] if r["id"] not in kept)
+            recs = []
+            for card, ok in zip(before, fits):
+                new = self._rescore(card, members, ranked) if ok else next(fresh, None)
+                if new:
+                    recs.append(new)
+            await self._save_state(state, recommendations=recs, message=message, details=None)
             result = await self._couch_result(state, created)
-            result["recommendations"] = recs["recommendations"]
-            result["removed_from_screen"] = [title for movie_id, title in before.items() if movie_id not in after]
+            result["recommendations"] = recs
+            result["removed_from_screen"] = [card["title"] for card, ok in zip(before, fits) if not ok]
             return result
         await self._save_state(state, screen="couch", message=message)
         return await self._couch_result(state, created)
@@ -260,13 +271,9 @@ class Popcorn:
             raise PopcornError(f"I couldn't find a movie called {movie}.")
         return await self._tmdb.movie(results[0]["id"])
 
-    async def recommend(self, boost_genres: list[str] | None = None, limit: int = 6) -> dict:
-        state = await self.get_state()
-        members = await self._members(state)
-        if not members:
-            raise PopcornError("The couch is empty. Tell me who is watching first.")
+    async def _rank(self, members: list[dict], boost_genres: list[str], limit: int) -> dict:
         genres = await self._tmdb.genres()
-        boost_ids, unknown = await self._resolve_genres(boost_genres or [])
+        boost_ids, unknown = await self._resolve_genres(boost_genres)
         vetoes = taste.vetoed(members)
         max_cert = taste.max_certification(members)
         weights = taste.group_genre_weights(members)
@@ -280,11 +287,9 @@ class Popcorn:
         seen = {w["id"] for p in members for w in p["watched"]} | {m for p in members for m in p["disliked"]}
         scored = []
         for movie in {m["id"]: m for page in pages for m in page}.values():
-            genre_ids = set(movie["genre_ids"])
-            if movie["id"] in seen or genre_ids & vetoes:
+            if movie["id"] in seen or set(movie["genre_ids"]) & vetoes:
                 continue
-            group = taste.group_score([taste.member_score(p, movie["genre_ids"]) for p in members])
-            boosted = bool(genre_ids & set(boost_ids))
+            group, boosted = self._score(members, movie["genre_ids"], boost_ids)
             rank = group + (0.25 if boosted else 0) + (movie["vote_average"] - 7) * 0.05
             scored.append((rank, group, boosted, movie))
         scored.sort(key=lambda s: -s[0])
@@ -295,10 +300,38 @@ class Popcorn:
             card["match"] = taste.match_percent(group, movie["vote_average"], boosted)
             card["why"] = taste.why_line(members, movie["genre_ids"], genres)
             recs.append(card)
+        return {"recommendations": recs, "kid_filter": max_cert, "unknown": unknown, "vetoes": vetoes,
+                "seen": seen, "boost_ids": boost_ids, "genres": genres}
+
+    @staticmethod
+    def _score(members: list[dict], genre_ids, boost_ids) -> tuple[float, bool]:
+        group = taste.group_score([taste.member_score(p, genre_ids) for p in members])
+        return group, bool(set(genre_ids) & set(boost_ids))
+
+    async def _fits(self, card: dict, members: list[dict], ranked: dict) -> bool:
+        """Can this card stay on screen for the new couch?"""
+        if card["id"] in ranked["seen"] or set(card["genre_ids"]) & ranked["vetoes"]:
+            return False
+        if ranked["kid_filter"] is None:
+            return True
+        return cert_allowed(us_certification(await self._tmdb.movie(card["id"])), ranked["kid_filter"])
+
+    def _rescore(self, card: dict, members: list[dict], ranked: dict) -> dict:
+        group, boosted = self._score(members, card["genre_ids"], ranked["boost_ids"])
+        return {**card, "match": taste.match_percent(group, card["rating"], boosted),
+                "why": taste.why_line(members, card["genre_ids"], ranked["genres"])}
+
+    async def recommend(self, boost_genres: list[str] | None = None, limit: int = 6) -> dict:
+        state = await self.get_state()
+        members = await self._members(state)
+        if not members:
+            raise PopcornError("The couch is empty. Tell me who is watching first.")
+        ranked = await self._rank(members, boost_genres or [], limit)
+        recs = ranked["recommendations"]
         await self._save_state(state, screen="recommendations", recommendations=recs, boost=boost_genres or [], duel=None, details=None)
-        result = {"couch": [p["name"] for p in members], "kid_filter": max_cert, "recommendations": recs}
-        if unknown:
-            result["unknown_genres"] = unknown
+        result = {"couch": [p["name"] for p in members], "kid_filter": ranked["kid_filter"], "recommendations": recs}
+        if ranked["unknown"]:
+            result["unknown_genres"] = ranked["unknown"]
         return result
 
     async def get_movie_details(self, movie: str, show_on_tv: bool = True) -> dict:
@@ -365,7 +398,8 @@ class Popcorn:
 
     async def _next_duel_round(self, state: dict, profile: dict) -> dict:
         duel = state["duel"]
-        max_cert = taste.max_certification([profile])
+        # The whole couch sees the posters, so a kid on the couch keeps the duel kid-safe.
+        max_cert = taste.max_certification([profile, *await self._members(state)])
         pairs = KID_DUEL_PAIRS if max_cert else DUEL_PAIRS
         left_genre, right_genre = pairs[duel["round"] % len(pairs)]
         exclude = set(duel["shown"]) | {w["id"] for w in profile["watched"]}

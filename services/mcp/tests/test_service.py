@@ -105,10 +105,23 @@ def test_kid_joining_removes_unsafe_movies_live():
     assert "Star War Zone" in [r["title"] for r in before["recommendations"]]
     assert after["kid_filter"] == "PG"
     assert "Star War Zone" in after["removed_from_screen"]
+    assert "Space Kids" not in after["removed_from_screen"]
+    assert "Space Kids" in [r["title"] for r in after["recommendations"]]  # safe cards stay
     safe = {CATALOG[r["id"]][2] for r in after["recommendations"]}
     assert safe <= {"G", "PG"}
     assert state["screen"] == "recommendations"
     assert [m["name"] for m in state["members"]] == ["Bedirhan", "Can"]
+
+
+def test_duel_is_kid_safe_when_a_kid_is_on_the_couch():
+    async def scenario():
+        p = make()
+        await p.set_couch([{"name": "Bedirhan"}, {"name": "Can", "age": 8}])
+        return (await p.start_duel("Bedirhan"))["duel"]
+
+    duel = run(scenario())
+    for side in ("left", "right"):
+        assert CATALOG[duel[side]["id"]][2] in {"G", "PG"}
 
 
 def test_poster_duel_builds_taste():

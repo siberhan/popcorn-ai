@@ -34,9 +34,12 @@ interface DisplayItem {
 interface RecommendationCardProps {
   item: DisplayItem;
   fadeAnim: Animated.Value;
+  kidSafe: boolean; // removed because a kid joined the couch
 }
 
-function RecommendationCard({ item, fadeAnim }: RecommendationCardProps) {
+const FADE_MS = 1800;
+
+function RecommendationCard({ item, fadeAnim, kidSafe }: RecommendationCardProps) {
   const focusScale = useRef(new Animated.Value(1)).current;
   const { movie, fadingOut } = item;
 
@@ -97,7 +100,7 @@ function RecommendationCard({ item, fadeAnim }: RecommendationCardProps) {
                 {fadingOut ? (
                   <View style={styles.filteredBadge}>
                     <Text style={styles.filteredBadgeText}>
-                      REMOVED · KID-SAFE
+                      {kidSafe ? 'REMOVED · KID-SAFE' : 'REMOVED'}
                     </Text>
                   </View>
                 ) : (
@@ -127,7 +130,9 @@ function RecommendationCard({ item, fadeAnim }: RecommendationCardProps) {
               <View style={styles.whyBox}>
                 <Text style={styles.whyText} numberOfLines={2}>
                   {fadingOut
-                    ? 'Filtered out after couch change to keep tonight kid-safe'
+                    ? kidSafe
+                      ? 'Filtered out after couch change to keep tonight kid-safe'
+                      : 'Not for this couch anymore'
                     : movie.why || movie.overview}
                 </Text>
               </View>
@@ -148,7 +153,9 @@ export default function RecommendationsScreen({
 
   const prevRecsRef = useRef<MovieCard[]>(state.recommendations || []);
   const prevVersionRef = useRef<number>(state.version);
+  const prevKidFilterRef = useRef(kidFilter);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const [kidSafeFade, setKidSafeFade] = useState(false);
 
   const [displayItems, setDisplayItems] = useState<DisplayItem[]>(() =>
     (state.recommendations || []).slice(0, 6).map((m) => ({
@@ -184,24 +191,29 @@ export default function RecommendationsScreen({
 
         setDisplayItems(merged.slice(0, 6));
         setFadingCount(removed.length);
+        setKidSafeFade(Boolean(kidFilter) && kidFilter !== prevKidFilterRef.current);
         fadeAnim.setValue(1);
 
-        Animated.timing(fadeAnim, {
+        const animation = Animated.timing(fadeAnim, {
           toValue: 0,
-          duration: 1800,
-          useNativeDriver: false,
-        }).start(({ finished }) => {
-          if (finished) {
-            setFadingCount(0);
-            setDisplayItems(
-              incoming.map((m) => ({ movie: m, fadingOut: false }))
-            );
-          }
+          duration: FADE_MS,
+          useNativeDriver: true,
         });
+        animation.start();
+        // Swap in the new cards on a timer, not the animation callback:
+        // on Vega the callback may never fire and the screen would freeze.
+        const swap = setTimeout(() => {
+          setFadingCount(0);
+          setDisplayItems(incoming.map((m) => ({ movie: m, fadingOut: false })));
+        }, FADE_MS + 100);
 
         prevRecsRef.current = incoming;
         prevVersionRef.current = state.version;
-        return;
+        prevKidFilterRef.current = kidFilter;
+        return () => {
+          clearTimeout(swap);
+          animation.stop();
+        };
       }
     }
 
@@ -209,7 +221,8 @@ export default function RecommendationsScreen({
     setDisplayItems(incoming.map((m) => ({ movie: m, fadingOut: false })));
     prevRecsRef.current = incoming;
     prevVersionRef.current = state.version;
-  }, [state.version, state.recommendations, fadeAnim]);
+    prevKidFilterRef.current = kidFilter;
+  }, [state.version, state.recommendations, kidFilter, fadeAnim]);
 
   return (
     <View style={styles.screen}>
@@ -239,7 +252,9 @@ export default function RecommendationsScreen({
           {fadingCount > 0 ? (
             <View style={styles.fadeNoticePill}>
               <Text style={styles.fadeNoticeText}>
-                Fading out {fadingCount} unsafe title{fadingCount > 1 ? 's' : ''}...
+                {kidSafeFade
+                  ? `Fading out ${fadingCount} unsafe title${fadingCount > 1 ? 's' : ''}...`
+                  : `Updating ${fadingCount} title${fadingCount > 1 ? 's' : ''}...`}
               </Text>
             </View>
           ) : null}
@@ -266,6 +281,7 @@ export default function RecommendationsScreen({
                   key={`${item.movie.id}-${item.fadingOut ? 'fade' : 'live'}`}
                   item={item}
                   fadeAnim={fadeAnim}
+                  kidSafe={kidSafeFade}
                 />
               );
               if (idx === 0) {

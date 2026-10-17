@@ -6,6 +6,7 @@ The agent URL streams responses (Server-Sent Events for /chat/stream).
   uv run deploy.py deploy     build both zips, then create or update everything
   uv run deploy.py status     print the URLs and check /health
   uv run deploy.py destroy    delete the functions, URLs, roles and log groups (keeps the DynamoDB table)
+  uv run deploy.py reset      forget the demo household, for a fresh demo (keeps the TMDB cache)
 
 Secrets (TMDB, OpenRouter) are read from the repo's .env and set as Lambda environment variables.
 They are never printed.
@@ -270,12 +271,28 @@ def destroy() -> None:
     print(f"kept DynamoDB table {TABLE}")
 
 
+def reset() -> None:
+    """Forget the demo household (profiles, couch, TV state). The TMDB cache stays."""
+    pages = session.client("dynamodb").get_paginator("scan").paginate(
+        TableName=TABLE,
+        ProjectionExpression="pk",
+        FilterExpression="begins_with(pk, :household)",
+        ExpressionAttributeValues={":household": {"S": f"{HOUSEHOLD}:"}},
+    )
+    keys = list(pages.search("Items[].pk.S"))
+    table = session.resource("dynamodb").Table(TABLE)
+    with table.batch_writer() as batch:
+        for key in keys:
+            batch.delete_item(Key={"pk": key})
+    print(f"deleted {len(keys)} items of household {HOUSEHOLD}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["deploy", "status", "destroy"])
+    parser.add_argument("command", choices=["deploy", "status", "destroy", "reset"])
     args = parser.parse_args()
     try:
-        {"deploy": deploy, "status": status, "destroy": destroy}[args.command]()
+        {"deploy": deploy, "status": status, "destroy": destroy, "reset": reset}[args.command]()
         return 0
     except ClientError as exc:
         print(f"AWS error: {exc}", file=sys.stderr)

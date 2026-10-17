@@ -89,8 +89,10 @@ def build_mcp(popcorn: Popcorn) -> MCPServer:
     @mcp.tool(annotations=READ_ONLY)
     @_user_errors
     async def get_profiles(names: list[str] | None = None) -> dict:
-        """Taste memory for the given people, or for everyone in the household if no names are given."""
-        return {"profiles": await popcorn.get_profiles(names)}
+        """Taste memory for the given people, or for everyone in the household if no names are given.
+        Also says who is on the couch right now."""
+        state = await popcorn.tv_state()
+        return {"profiles": await popcorn.get_profiles(names), "on_couch": [m["name"] for m in state["members"]]}
 
     @mcp.tool(annotations=UPDATES_TV)
     @_user_errors

@@ -1,15 +1,15 @@
 /**
  * Popcorn AI — Voice Page Configuration & Constants
  * Overridable via URL query parameters:
- *   ?agent=http://127.0.0.1:8100
- *   ?tv=http://127.0.0.1:8000/api/state
+ *   ?agent=http://127.0.0.1:8100              (default: the deployed agent on Lambda)
+ *   ?tv=http://127.0.0.1:8000/api/state       (default: the deployed MCP server on Lambda)
  *   ?mock=1
  */
 
 const params = new URLSearchParams(window.location.search);
 
-export const AGENT_URL = (params.get("agent") || "http://127.0.0.1:8100").replace(/\/+$/, "");
-export const TV_STATE_URL = params.get("tv") || "http://127.0.0.1:8000/api/state";
+export const AGENT_URL = (params.get("agent") || "https://5h3jfj5ivg6nddn5lgygk4y4fm0rsnho.lambda-url.eu-north-1.on.aws").replace(/\/+$/, "");
+export const TV_STATE_URL = params.get("tv") || "https://5ylcrhgrmbi44tjoqhv2oqbipm0ljqdg.lambda-url.eu-north-1.on.aws/api/state";
 export const MOCK_MODE = params.get("mock") === "1" || params.get("mock") === "true";
 export const INITIAL_ORB_STATE = params.get("state") || "idle";
 
