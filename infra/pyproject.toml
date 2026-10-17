@@ -1,0 +1,12 @@
+[project]
+name = "popcorn-infra"
+version = "0.1.0"
+description = "Deploy Popcorn AI to AWS Lambda"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3==1.43.114",
+    "botocore[crt]",  # crt: needed locally for aws login credentials
+]
+
+[tool.uv]
+package = false
