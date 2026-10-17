@@ -87,3 +87,5 @@ License: MIT.
 | MCP sessions lost on Lambda | Stateless mode + Lambda Web Adapter; short tool calls |
 | Polly not on Free plan | Check console; fall back to browser speech synthesis |
 | AWS Builder with a non-Bedrock LLM | No staff confirmation; may ask in forum |
+| Movie posters (studio copyright) in app/video | Ask organizers in forum; build a "demo art" mode (generated cards, no TMDB images) for the video; never commit posters to the repo |
+| Alexa branding | No Alexa logo, no Alexa-like voice, no "Alexa" in project name; plain-text "Simulated Alexa+" label |
