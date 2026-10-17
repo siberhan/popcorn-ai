@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "plugins": [
+      "./plugins/withKotlinJvmTarget",
+      "./plugins/withKeyEvent",
+      "./plugins/withTvosDeploymentTarget",
+      [
+        "@react-native-tvos/config-tv",
+        {
+          "androidTVBanner": "./assets/tv_icons/icon-400x240.png",
+          "appleTVImages": {
+            "icon": "./assets/tv_icons/icon-1280x768.png",
+            "iconSmall": "./assets/tv_icons/icon-400x240.png",
+            "iconSmall2x": "./assets/tv_icons/icon-800x480.png",
+            "topShelf": "./assets/tv_icons/icon-1920x720.png",
+            "topShelf2x": "./assets/tv_icons/icon-1920x720.png",
+            "topShelfWide": "./assets/tv_icons/icon-1920x720.png",
+            "topShelfWide2x": "./assets/tv_icons/icon-1920x720.png"
+          }
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          },
+          "android": {
+            "kotlinVersion": "2.0.21",
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 34,
+            "minSdkVersion": 24
+          }
+        }
+      ],
+      "./plugins/withFmtXcode26Fix"
+    ],
+    "name": "Popcorn AI",
+    "slug": "popcorn-ai",
+    "scheme": "com.popcornai.tv",
+    "android": {
+      "package": "com.popcornai.tv"
+    },
+    "ios": {
+      "bundleIdentifier": "com.popcornai.tv"
+    },
+    "newArchEnabled": false
+  }
+}
