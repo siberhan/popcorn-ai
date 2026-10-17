@@ -27,7 +27,6 @@ Tracks: Fire TV + Alexa+ (one project, both tracks; can win only one). Mini chal
 3. "Suggest a movie for us" → TV shows posters with match % and a "why" line for each.
 4. "Can joined us" → child sits on the couch → kid-unsafe movies disappear live.
 5. "We watched it, Ayşe loved it" → memory updates; next session remembers.
-6. Bonus: the same MCP server used from Antigravity CLI.
 
 ## Architecture
 
@@ -63,7 +62,7 @@ README.md, LICENSE
 | 1 | Sun 10-18 | MCP server + TMDB client + storage; test with an MCP client |
 | 2 | Mon 10-19 | Agent (Strands + OpenRouter) + Alexa web page (voice in/out). Office hours 19:00 TSİ |
 | 3 | Tue 10-20 | TV app in browser: couch, recommendations grid, poster duel, D-pad focus |
-| 4 | Wed 10-21 | Vega build on VVD; deploy to Lambda + DynamoDB; end-to-end; Antigravity bonus |
+| 4 | Wed 10-21 | Vega build on VVD; deploy to Lambda + DynamoDB; end-to-end |
 | 5 | Thu 10-22 | Polish, README, TMDB About screen, license, product feedback; user records video |
 | 6 | Fri 10-23 | Buffer; submit on Devpost before noon TSİ |
 
