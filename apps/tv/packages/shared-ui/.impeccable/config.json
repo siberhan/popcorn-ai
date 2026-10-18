@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/key-art.html"
+        ],
+        "createdAt": "2026-10-18T13:54:55.909Z",
+        "reason": "model decided: the radial gradient is a stand-in for a TMDB backdrop's sun in a decision sketch, not page chrome; the build loads the real image"
+      },
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          ".impeccable/mocks/decision/reel.html"
+        ],
+        "createdAt": "2026-10-18T14:38:08.307Z",
+        "reason": "model decided: the flagged text is the faded previous/next film rows the user asked for as ghosts behind the focused film; the focused text is full white"
+      }
+    ]
+  }
+}

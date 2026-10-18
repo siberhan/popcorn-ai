@@ -44,7 +44,8 @@ class MemoryStore:
 
 class DynamoStore:
     def __init__(self, table_name: str, region: str) -> None:
-        config = Config(retries={"total_max_attempts": 3, "mode": "standard"}, connect_timeout=3, read_timeout=5)
+        config = Config(retries={"total_max_attempts": 3, "mode": "standard"}, connect_timeout=3, read_timeout=5,
+                        max_pool_connections=32)  # pools check many films at once
         self._table = boto3.resource("dynamodb", region_name=region, config=config).Table(table_name)
 
     async def get(self, key: str) -> dict | None:

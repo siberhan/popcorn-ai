@@ -24,6 +24,7 @@
     "@amazon-devices/react-native-reanimated": "~2.0.0",
     "@amazon-devices/react-native-safe-area-context": "*",
     "@amazon-devices/react-native-screens": "*",
+    "@amazon-devices/react-native-w3cmedia": "~2.1.80",
     "@bam.tech/lrud": "*",
     "@multi-tv/shared-ui": "workspace:*",
     "react": "18.2.0",

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Console home screen · couch</title>
+<style>
+  :root { --ground:#0B0D12; --tile:#1C2230; --white:#FFFFFF; --mute:#B4BCCB; --focus:#3D7BF7; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--ground); color:var(--white);
+    font-family:-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif; }
+  .backdrop { position:absolute; inset:0;
+    background:
+      radial-gradient(60% 70% at 78% 30%, rgba(44,92,120,0.55), transparent 70%),
+      radial-gradient(40% 50% at 92% 70%, rgba(150,88,46,0.35), transparent 70%),
+      linear-gradient(90deg, var(--ground) 30%, rgba(11,13,18,0.6) 70%, rgba(11,13,18,0.3)); }
+  .shade { position:absolute; left:0; right:0; bottom:0; height:420px; background:linear-gradient(transparent, var(--ground)); }
+  header { position:absolute; left:96px; right:96px; top:60px; display:flex; justify-content:space-between; font-size:28px; font-weight:500; }
+  header span:last-child { color:var(--mute); }
+  h1 { position:absolute; left:96px; top:250px; font-size:60px; font-weight:600; letter-spacing:-0.02em; }
+  .row { position:absolute; left:96px; top:390px; display:flex; gap:44px; align-items:flex-start; }
+  .p { width:180px; display:flex; flex-direction:column; align-items:center; }
+  .disc { width:180px; height:180px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:60px; font-weight:600; position:relative; }
+  .b .disc { background:linear-gradient(135deg,#2F6FDB,#1B3E86); }
+  .a .disc { background:linear-gradient(135deg,#C2547A,#7A2748); }
+  .c .disc { background:linear-gradient(135deg,#B26A16,#7A430C); }
+  .d .disc { background:linear-gradient(135deg,#3CA58A,#1E6452); }
+  .add .disc { background:rgba(255,255,255,0.08); }
+  .focus .disc { transform:scale(1.22); box-shadow:0 0 0 6px var(--white), 0 30px 60px rgba(0,0,0,0.6); }
+  .on .disc::after { content:""; position:absolute; right:-2px; bottom:-2px; width:48px; height:48px; border-radius:50%;
+    background:var(--white); border:4px solid var(--ground); }
+  .name { margin-top:30px; font-size:30px; font-weight:500; color:var(--mute); }
+  .focus .name { margin-top:52px; color:var(--white); font-weight:600; }
+  .plus { font-size:80px; font-weight:300; line-height:1; color:var(--white); }
+  .info { position:absolute; left:96px; bottom:96px; }
+  .info .t { font-size:40px; font-weight:600; }
+  .info .s { margin-top:14px; font-size:26px; color:var(--mute); }
+  .cta { position:absolute; right:96px; bottom:96px; height:88px; padding:0 56px; border-radius:44px; background:var(--white);
+    color:#0B0D12; font-size:32px; font-weight:600; display:flex; align-items:center; }
+</style>
+</head>
+<body>
+  <div class="backdrop"></div>
+  <div class="shade"></div>
+  <header><span>Popcorn AI</span><span>20:41</span></header>
+  <h1>Who's watching?</h1>
+  <div class="row">
+    <div class="p add"><div class="disc"><span class="plus">+</span></div><div class="name">Add</div></div>
+    <div class="p b on focus"><div class="disc">B</div><div class="name">Bedirhan</div></div>
+    <div class="p a on"><div class="disc">A</div><div class="name">Ayse</div></div>
+    <div class="p c on"><div class="disc">C</div><div class="name">Can, 9</div></div>
+    <div class="p d"><div class="disc">D</div><div class="name">Deniz, 7</div></div>
+  </div>
+  <div class="info">
+    <div class="t">3 people on the couch</div>
+    <div class="s">Can is 9, so picks stay PG</div>
+  </div>
+  <div class="cta">Continue</div>
+</body>
+</html>

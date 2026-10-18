@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Taste Light · couch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ground:#08090C; --white:#FFFFFF; --mute:#C3C6CE; --dim:#8E929C;
+    --b:#1F6F7A; --a:#A0482C; --c:#B08A2E; --d:#4E6A3C; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--ground); color:var(--white);
+    font-family:'Figtree', sans-serif; }
+  .field { position:absolute; inset:-200px; filter:blur(140px); }
+  .blob { position:absolute; border-radius:50%; opacity:0.62; }
+  .blob.b { width:900px; height:760px; left:860px; top:80px; background:var(--b); animation:drift-a 26s ease-in-out infinite alternate; }
+  .blob.a { width:760px; height:680px; left:1360px; top:420px; background:var(--a); animation:drift-b 31s ease-in-out infinite alternate; }
+  .blob.c { width:640px; height:600px; left:1120px; top:760px; background:var(--c); opacity:0.5; animation:drift-a 23s ease-in-out infinite alternate-reverse; }
+  @keyframes drift-a { to { transform:translate(-120px, 60px) scale(1.08); } }
+  @keyframes drift-b { to { transform:translate(90px, -80px) scale(0.94); } }
+  .scrim { position:absolute; inset:0; background:linear-gradient(90deg, rgba(8,9,12,0.92) 0%, rgba(8,9,12,0.55) 45%, rgba(8,9,12,0.1) 100%); }
+  header { position:absolute; left:96px; right:96px; top:58px; display:flex; justify-content:space-between; font-size:26px; font-weight:600; }
+  header span:last-child { color:var(--mute); font-weight:500; font-variant-numeric:tabular-nums; }
+  h1 { position:absolute; left:96px; top:292px; font-size:46px; font-weight:600; letter-spacing:-0.015em; }
+  .sub { position:absolute; left:96px; top:360px; font-size:24px; color:var(--mute); font-weight:500; }
+  .row { position:absolute; left:96px; top:448px; display:flex; gap:40px; align-items:flex-start; }
+  .p { width:164px; display:flex; flex-direction:column; align-items:center; }
+  .disc { width:164px; height:164px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:54px; font-weight:600; position:relative; }
+  .p.b .disc { background:radial-gradient(circle at 35% 30%, #2C8A96, #12434A); }
+  .p.a .disc { background:radial-gradient(circle at 35% 30%, #B5583A, #5E2617); }
+  .p.c .disc { background:radial-gradient(circle at 35% 30%, #8F6F1F, #4A3A0E); }
+  .p.d .disc { background:radial-gradient(circle at 35% 30%, #4E6A3C, #26341C); opacity:0.55; }
+  .add .disc { background:rgba(255,255,255,0.08); box-shadow:inset 0 0 0 2px rgba(255,255,255,0.18); }
+  .seated .disc { box-shadow:0 0 0 4px var(--ground), 0 0 0 8px var(--white); }
+  .focus .disc { transform:scale(1.16); box-shadow:0 0 0 4px var(--ground), 0 0 0 8px var(--white), 0 28px 56px rgba(0,0,0,0.55); }
+  .check { position:absolute; right:-2px; bottom:-2px; width:46px; height:46px; border-radius:50%; background:var(--white);
+    border:4px solid var(--ground); display:flex; align-items:center; justify-content:center; }
+  .check::after { content:""; width:16px; height:9px; border-left:4px solid #08090C; border-bottom:4px solid #08090C;
+    transform:rotate(-45deg) translate(1px,-2px); }
+  .age { position:absolute; left:-4px; top:-4px; padding:6px 12px; border-radius:16px; background:var(--white); color:#08090C;
+    font-size:20px; font-weight:700; line-height:1; }
+  .plus { position:relative; width:44px; height:44px; }
+  .plus::before, .plus::after { content:""; position:absolute; background:var(--white); border-radius:2px; }
+  .plus::before { left:20px; top:0; width:4px; height:44px; }
+  .plus::after { top:20px; left:0; height:4px; width:44px; }
+  .name { margin-top:26px; font-size:24px; font-weight:500; color:var(--dim); }
+  .seated .name { color:var(--white); }
+  .focus .name { margin-top:40px; font-weight:600; }
+  .tastes { position:absolute; left:96px; bottom:96px; display:flex; gap:28px; font-size:22px; color:var(--mute); font-weight:500; }
+  .tastes span { display:flex; align-items:center; gap:10px; }
+  .tastes i { width:14px; height:14px; border-radius:50%; display:inline-block; }
+  .cta { position:absolute; right:96px; bottom:84px; height:80px; padding:0 48px; border-radius:40px; background:var(--white);
+    color:#08090C; font-size:28px; font-weight:600; display:flex; align-items:center; gap:16px; }
+  .credit { position:absolute; right:96px; bottom:40px; font-size:18px; color:var(--dim); }
+</style>
+</head>
+<body>
+  <div class="field"><div class="blob b"></div><div class="blob a"></div><div class="blob c"></div></div>
+  <div class="scrim"></div>
+  <header><span>Popcorn AI</span><span>20:41</span></header>
+  <h1>Who's watching tonight?</h1>
+  <div class="sub">3 on the couch · Can is 9, so picks stay PG</div>
+  <div class="row">
+    <div class="p add"><div class="disc"><div class="plus"></div></div><div class="name">Add</div></div>
+    <div class="p b seated focus"><div class="disc">B<div class="check"></div></div><div class="name">Bedirhan</div></div>
+    <div class="p a seated"><div class="disc">A<div class="check"></div></div><div class="name">Ayse</div></div>
+    <div class="p c seated"><div class="disc"><span class="age">9</span>C<div class="check"></div></div><div class="name">Can</div></div>
+    <div class="p d"><div class="disc"><span class="age">7</span>D</div><div class="name">Deniz</div></div>
+  </div>
+  <div class="tastes">
+    <span><i style="background:#2C8A96"></i>Bedirhan · slow sci-fi</span>
+    <span><i style="background:#B5583A"></i>Ayse · warm dramas</span>
+    <span><i style="background:#B08A2E"></i>Can · animated adventures</span>
+  </div>
+  <div class="cta">Popcorn</div>
+  <div class="credit">Sample tastes for this sketch</div>
+</body>
+</html>

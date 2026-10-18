@@ -13,7 +13,18 @@ export const TV_STATE_URL = params.get("tv") || "https://5ylcrhgrmbi44tjoqhv2oqb
 export const MOCK_MODE = params.get("mock") === "1" || params.get("mock") === "true";
 export const INITIAL_ORB_STATE = params.get("state") || "idle";
 
+/** MCP server base URL, derived from the TV state URL (used for POST /api/rating/live). */
+export const MCP_BASE_URL = TV_STATE_URL.replace(/\/api\/state\/?(\?.*)?$/, "").replace(/\/+$/, "");
+
 export const TV_POLL_INTERVAL_MS = 1500;
+/** Faster polling while the TV is on screens the page narrates (rating, recommendations). */
+export const TV_POLL_FAST_MS = 1000;
+/** Rating: close the mic after this long without any speech. */
+export const RATING_SILENCE_MS = 8000;
+/** Rating: at most one POST /api/rating/live per this many ms (4/s). */
+export const RATING_LIVE_THROTTLE_MS = 250;
+/** Why narration: max parallel POST /speak requests while pre-generating clips. */
+export const NARRATION_MAX_PARALLEL = 2;
 export const STORAGE_KEY_SPEAKER = "popcorn_ai_speaker";
 
 /**

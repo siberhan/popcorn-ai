@@ -1,0 +1,47 @@
+  0.98s  STATE v2 screen=couch focus=None asking=None
+  1.93s  [voice] recommendations changed: 0 films, 0 clips to generate
+  5.11s  STATE v3 screen=recommendations focus=None asking=None
+  7.62s  STATE v4 screen=recommendations focus={'movie_id': 102, 'at': 1} asking=None
+  8.02s  STATE v5 screen=recommendations focus={'movie_id': 103, 'at': 2} asking=None
+ 10.03s  [voice] recommendations changed: 3 films, 3 clips to generate
+ 10.03s  [voice] clip start  101 (in flight 1)
+ 10.03s  [voice] clip start  102 (in flight 2)
+ 10.03s  [voice] clip ready  102 in 303 ms: "Paddington 2. Ayse loves comedy."
+ 10.03s  [voice] clip start  103 (in flight 2)
+ 10.03s  [voice] clip ready  101 in 304 ms: "Hoppers. Bedirhan loves science fiction, and Ayse loves comedy."
+ 10.03s  [voice] clip ready  103 in 308 ms: "Coco. Bedirhan loves animation, Ayse loves music, and kid-safe for Can."
+ 10.03s  [voice] focus 103: playing clip "Coco. Bedirhan loves animation, Ayse loves music, and kid-safe for Can."
+ 10.36s  STATE v6 screen=rating focus=None asking=Bedirhan
+ 12.37s  [voice] asking -> Bedirhan: queued question "Bedirhan, what did you think of Hoppers?"
+ 12.37s  [voice] question spoken: "Bedirhan, what did you think of Hoppers?"
+ 12.37s  [voice] mic open for Bedirhan (no wake word, 8 s silence limit)
+ 12.45s  [voice] live post #1 at 15633 ms: "I"
+ 12.70s  [voice] live post #2 at 15885 ms: "I really loved it"
+ 15.77s  STATE v7 screen=rating focus=None asking=Ayse
+ 19.28s  [voice] live post #3 at 16136 ms: "I really loved it it was so"
+ 19.28s  [voice] mic closed for Bedirhan (final result), 3 live posts
+ 19.28s  [voice] final for Bedirhan: "I really loved it it was so much fun" -> /chat/stream
+ 19.28s  [voice] asking -> Ayse: queued question "Ayse, your turn."
+ 19.28s  [voice] question spoken: "Ayse, your turn."
+ 19.28s  [voice] mic open for Ayse (no wake word, 8 s silence limit)
+ 19.35s  STATE v8 screen=rating focus=None asking=Can
+ 30.36s  [voice] asking changed while listening to Ayse: stop listening
+ 30.36s  [voice] mic closed for Ayse (asking changed), 0 live posts
+ 30.36s  [voice] asking -> Can: queued question "Can, your turn."
+ 30.36s  [voice] question spoken: "Can, your turn."
+ 30.36s  [voice] mic open for Can (no wake word, 8 s silence limit)
+ 30.36s  [voice] no speech from Can for 8 s: closing mic
+ 30.36s  [voice] mic closed for Can (silence), 0 live posts
+ 30.43s  STATE v9 screen=rating focus=None asking=None
+mock tv pill: PICKS
+server +  5.46s speak  {"text": "Hoppers. Bedirhan loves science fiction, and Ayse loves comedy."}
+server +  5.46s speak  {"text": "Paddington 2. Ayse loves comedy."}
+server +  5.76s speak  {"text": "Coco. Bedirhan loves animation, Ayse loves music, and kid-safe for Can."}
+server +  9.47s speak  {"text": "Bedirhan, what did you think of Hoppers?"}
+server + 11.47s live   {"text": "I"}
+server + 11.72s live   {"text": "I really loved it"}
+server + 11.97s live   {"text": "I really loved it it was so"}
+server + 12.16s chat   {"text": "I really loved it it was so much fun", "speaker": "Bedirhan"}
+server + 12.32s speak  {"text": "Got it, Bedirhan, saved."}
+server + 15.50s speak  {"text": "Ayse, your turn."}
+server + 18.52s speak  {"text": "Can, your turn."}

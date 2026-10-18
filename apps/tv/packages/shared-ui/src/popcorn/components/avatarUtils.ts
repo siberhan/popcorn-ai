@@ -1,17 +1,28 @@
 import { colors } from '../../theme';
+import { consoleDiscs } from '../../theme/console';
 import { Member } from '../types';
+
+/** Stable hash of a person's name (case and outer spaces ignored). */
+function nameHash(name: string): number {
+  const clean = (name || 'Guest').trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < clean.length; i += 1) {
+    hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
 
 /**
  * Deterministic warm cinema avatar color derived from a person's name.
  * Matches apps/alexa-web/config.js and tokens.json.
  */
 export function avatarColorForName(name: string): string {
-  const clean = (name || 'Guest').trim().toLowerCase();
-  let hash = 0;
-  for (let i = 0; i < clean.length; i += 1) {
-    hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
-  }
-  return colors.avatar[hash % colors.avatar.length];
+  return colors.avatar[nameHash(name) % colors.avatar.length];
+}
+
+/** Same name-to-color mapping as `avatarColorForName`, on the console disc palette (couch screen). */
+export function consoleDiscColorForName(name: string): string {
+  return consoleDiscs[nameHash(name) % consoleDiscs.length];
 }
 
 /**
@@ -25,6 +36,14 @@ export function initialsForName(name: string): string {
   if (parts.length === 0) return '?';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/** Console discs: one letter for a one-word name, first and last initial for longer names. */
+export function discInitialsForName(name: string): string {
+  const parts = (name || '?').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
 /**

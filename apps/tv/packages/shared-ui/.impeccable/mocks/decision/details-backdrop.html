@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Backdrop hero · film details</title>
+<style>
+  :root { --ground:#0B0D12; --white:#FFFFFF; --mute:#B4BCCB; --dim:#8F98AB; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--ground); color:var(--white);
+    font-family:-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif; }
+  /* Backdrop stand-in; the app shows the TMDB backdrop image. */
+  .backdrop { position:absolute; left:640px; top:0; width:1280px; height:1080px;
+    background:linear-gradient(200deg, #0E2A36 0%, #1E4E5C 30%, #C46A2A 70%, #3A1C10 100%); }
+  .scrim { position:absolute; inset:0; background:linear-gradient(90deg, #0B0D12 0%, #0B0D12 33%, rgba(11,13,18,0.85) 48%, rgba(11,13,18,0.2) 75%), linear-gradient(0deg, rgba(11,13,18,0.8) 0%, transparent 35%); }
+  .label { position:absolute; right:96px; top:120px; font-size:20px; color:rgba(255,255,255,0.7); }
+  header { position:absolute; left:96px; right:96px; top:54px; display:flex; justify-content:space-between; align-items:center; font-size:28px; font-weight:500; }
+  .couch { display:flex; align-items:center; gap:14px; color:var(--mute); font-size:24px; }
+  .couch i { width:40px; height:40px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-size:18px; font-weight:600; color:var(--white); }
+  .info { position:absolute; left:96px; top:260px; width:960px; }
+  h1 { font-size:64px; font-weight:600; letter-spacing:-0.02em; }
+  .meta { margin-top:16px; font-size:26px; color:var(--mute); }
+  .chips { margin-top:22px; display:flex; gap:14px; }
+  .chip { height:48px; padding:0 20px; border-radius:24px; display:flex; align-items:center; font-size:22px; font-weight:600; box-shadow:inset 0 0 0 2px rgba(255,255,255,0.4); }
+  .chip.match { background:var(--white); color:var(--ground); box-shadow:none; }
+  .overview { margin-top:28px; font-size:28px; line-height:1.45; color:var(--mute); }
+  .credits { margin-top:18px; font-size:24px; color:var(--mute); }
+  .credits b { color:var(--white); font-weight:600; }
+  .watch { position:absolute; left:96px; bottom:120px; }
+  .watch h2 { font-size:26px; font-weight:600; color:var(--mute); }
+  .pills { margin-top:16px; display:flex; gap:20px; }
+  .pill { height:84px; padding:0 34px; border-radius:42px; display:flex; align-items:center; gap:14px; font-size:28px; font-weight:600; background:rgba(28,34,48,0.9); }
+  .pill span { font-size:22px; font-weight:500; color:var(--mute); }
+  .pill.on { background:var(--white); color:var(--ground); transform:scale(1.06); }
+  .pill.on span { color:#3A4150; }
+  .foot { position:absolute; left:96px; right:96px; bottom:40px; display:flex; justify-content:space-between; font-size:22px; color:var(--dim); }
+</style>
+</head>
+<body>
+  <div class="backdrop"></div>
+  <div class="scrim"></div>
+  <header>
+    <span>Popcorn AI</span>
+    <span class="couch"><i style="background:#8A5A12">B</i><i style="background:#4A5A72">A</i>Bedirhan and Ayse · 20:41</span>
+  </header>
+  <div class="label">Backdrop stand-in</div>
+  <div class="info">
+    <h1>Project Hail Mary</h1>
+    <div class="meta">2026 · Science Fiction · Adventure · 2 h 36 min · PG-13</div>
+    <div class="chips"><span class="chip match">92% match</span><span class="chip">TMDB 8.6</span><span class="chip">Fine for this couch</span></div>
+    <p class="overview">A science teacher wakes up alone on a spaceship light-years from home, with no memory of how he got there, and slowly works out that he is humanity's last chance.</p>
+    <div class="credits"><b>Director</b> Phil Lord, Christopher Miller · <b>Cast</b> Ryan Gosling, Sandra Hüller</div>
+  </div>
+  <div class="watch">
+    <h2>Where to watch</h2>
+    <div class="pills">
+      <div class="pill on">Prime Video <span>Included</span></div>
+      <div class="pill">Apple TV <span>Rent</span></div>
+      <div class="pill">Google TV <span>Buy</span></div>
+    </div>
+  </div>
+  <div class="foot"><span>Back: tonight's picks</span><span>Sample platform data · Streaming data by JustWatch</span></div>
+</body>
+</html>

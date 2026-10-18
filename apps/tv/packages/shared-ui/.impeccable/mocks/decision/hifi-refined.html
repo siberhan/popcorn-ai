@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hi-fi refined · couch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ground:#18191B; --slab:#2A2B2E; --alu:#E4E5E7; --mute:#A2A5AB; --led:#5FD48B; --edge:#3C3E42; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--ground); color:var(--alu);
+    font-family:'Hanken Grotesk', sans-serif; }
+  .lamp { position:absolute; inset:0; filter:blur(90px);
+    background:
+      radial-gradient(38% 46% at 50% 44%, rgba(255,240,222,0.10), transparent 70%),
+      radial-gradient(30% 36% at 18% 12%, rgba(255,226,190,0.07), transparent 70%),
+      radial-gradient(28% 34% at 86% 84%, rgba(150,176,200,0.07), transparent 70%); }
+  header { position:absolute; left:96px; right:96px; top:58px; display:flex; justify-content:space-between; align-items:center; }
+  .mark { font-size:26px; font-weight:600; letter-spacing:0.01em; }
+  .clock { font-size:26px; font-weight:500; color:var(--mute); font-variant-numeric:tabular-nums; }
+  h1 { position:absolute; left:0; right:0; top:262px; text-align:center; font-size:44px; font-weight:500; letter-spacing:-0.01em; }
+  .row { position:absolute; left:0; right:0; top:388px; display:flex; justify-content:center; gap:56px; }
+  .p { width:168px; display:flex; flex-direction:column; align-items:center; }
+  .disc { width:168px; height:168px; border-radius:50%; position:relative; display:flex; align-items:center; justify-content:center;
+    font-size:52px; font-weight:600; color:var(--alu);
+    background:radial-gradient(circle at 34% 28%, #45474C 0%, #2C2D30 55%, #222326 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -2px 0 rgba(0,0,0,0.4), 0 14px 30px rgba(0,0,0,0.35); }
+  .seated .disc { box-shadow:inset 0 1px 0 rgba(255,255,255,0.14), 0 0 0 5px var(--ground), 0 0 0 9px var(--led), 0 14px 30px rgba(0,0,0,0.35); }
+  .focus .disc { transform:scale(1.12);
+    background:radial-gradient(circle at 34% 28%, #55575C 0%, #34363A 55%, #26272A 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.18), 0 0 0 5px var(--ground), 0 0 0 9px var(--led), 0 0 0 13px var(--ground), 0 0 0 15px var(--alu), 0 26px 50px rgba(0,0,0,0.5); }
+  .led { width:10px; height:10px; border-radius:50%; background:var(--edge); margin-top:30px; }
+  .seated .led { background:var(--led); }
+  .focus .led { margin-top:42px; }
+  .name { margin-top:12px; font-size:24px; font-weight:500; color:var(--mute); }
+  .seated .name { color:var(--alu); }
+  .age { position:absolute; top:-2px; right:-2px; width:46px; height:46px; border-radius:50%; background:var(--alu);
+    color:#18191B; font-size:22px; font-weight:700; display:flex; align-items:center; justify-content:center;
+    border:4px solid var(--ground); }
+  .add .disc { background:transparent; box-shadow:inset 0 0 0 2px var(--edge); }
+  .plus { position:relative; width:44px; height:44px; }
+  .plus::before, .plus::after { content:""; position:absolute; background:var(--alu); border-radius:2px; }
+  .plus::before { left:20px; top:0; width:4px; height:44px; }
+  .plus::after { top:20px; left:0; height:4px; width:44px; }
+  .base { position:absolute; left:0; right:0; bottom:110px; display:flex; flex-direction:column; align-items:center; gap:22px; }
+  .slab { width:320px; height:84px; border-radius:42px; display:flex; align-items:center; justify-content:center; gap:18px;
+    font-size:30px; font-weight:600;
+    background:linear-gradient(180deg, #34363A, #26272A);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.14), inset 0 -2px 0 rgba(0,0,0,0.4), 0 14px 30px rgba(0,0,0,0.35); }
+  .slab .dot { width:12px; height:12px; border-radius:50%; background:var(--led); }
+  .status { font-size:22px; color:var(--mute); font-weight:500; }
+  .status b { color:var(--alu); font-weight:600; }
+  .credit { position:absolute; left:96px; bottom:50px; font-size:18px; color:var(--mute); }
+</style>
+</head>
+<body>
+  <div class="lamp"></div>
+  <header><div class="mark">Popcorn AI</div><div class="clock">20:41</div></header>
+  <h1>Who's watching tonight?</h1>
+  <div class="row">
+    <div class="p add"><div class="disc"><div class="plus"></div></div><div class="led"></div><div class="name">Add</div></div>
+    <div class="p seated focus"><div class="disc">B</div><div class="led"></div><div class="name">Bedirhan</div></div>
+    <div class="p seated"><div class="disc">A</div><div class="led"></div><div class="name">Ayse</div></div>
+    <div class="p seated"><div class="disc">C<span class="age">9</span></div><div class="led"></div><div class="name">Can</div></div>
+    <div class="p"><div class="disc">D<span class="age">7</span></div><div class="led"></div><div class="name">Deniz</div></div>
+  </div>
+  <div class="base">
+    <div class="slab"><span class="dot"></span>Popcorn</div>
+    <div class="status"><b>3 on the couch</b> · Can is 9, picks stay PG</div>
+  </div>
+  <div class="credit">This product uses the TMDB API but is not endorsed or certified by TMDB.</div>
+</body>
+</html>

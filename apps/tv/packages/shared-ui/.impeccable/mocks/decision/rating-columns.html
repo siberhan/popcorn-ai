@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Couch columns · how was it</title>
+<style>
+  :root { --ground:#0B0D12; --white:#FFFFFF; --mute:#B4BCCB; --dim:#8F98AB; --field:#1C2230; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--ground); color:var(--white);
+    font-family:-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif; }
+  .field { position:absolute; inset:-200px; filter:blur(150px); }
+  .blob { position:absolute; border-radius:50%; }
+  .blob.one { width:900px; height:800px; left:1100px; top:120px; background:#2C5C78; opacity:0.6; }
+  .blob.two { width:700px; height:600px; left:1500px; top:640px; background:#96582E; opacity:0.4; }
+  .scrim { position:absolute; inset:0; background:linear-gradient(90deg, rgba(11,13,18,0.95) 0%, rgba(11,13,18,0.7) 40%, rgba(11,13,18,0.15) 75%); }
+  header { position:absolute; left:96px; right:96px; top:54px; display:flex; justify-content:space-between; align-items:center; font-size:28px; font-weight:500; }
+  .clock { color:var(--mute); font-size:24px; }
+  .title { position:absolute; left:96px; top:200px; display:flex; gap:32px; align-items:center; }
+  /* Poster stand-in; the app shows the TMDB poster. */
+  .poster { width:110px; height:165px; border-radius:10px; background:linear-gradient(160deg, #1E4E5C 0%, #C46A2A 60%, #2A1A12 100%); }
+  h1 { font-size:60px; font-weight:600; letter-spacing:-0.02em; }
+  .sub { margin-top:10px; font-size:26px; color:var(--mute); }
+  .cols { position:absolute; left:96px; top:440px; display:flex; gap:72px; }
+  .col { width:260px; display:flex; flex-direction:column; align-items:center; }
+  .disc { width:150px; height:150px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:50px; font-weight:600; position:relative; }
+  .badge { position:absolute; right:0; bottom:0; width:44px; height:44px; border-radius:50%; background:var(--white); border:4px solid var(--ground); }
+  .badge::after { content:''; position:absolute; left:12px; top:6px; width:8px; height:16px; border:solid var(--ground); border-width:0 4px 4px 0; transform:rotate(45deg); }
+  .name { margin-top:20px; font-size:30px; font-weight:600; }
+  .opts { margin-top:24px; display:flex; flex-direction:column; gap:12px; width:100%; }
+  .opt { height:58px; border-radius:29px; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:500; color:var(--mute); box-shadow:inset 0 0 0 2px rgba(255,255,255,0.22); }
+  .opt.set { background:var(--white); color:var(--ground); font-weight:600; box-shadow:none; }
+  .opt.focus { box-shadow:0 0 0 4px var(--ground), 0 0 0 8px var(--white); color:var(--white); background:rgba(28,34,48,0.9); }
+  .hint { position:absolute; left:96px; bottom:96px; font-size:24px; color:var(--mute); }
+  .save { position:absolute; right:96px; bottom:72px; height:88px; padding:0 48px; border-radius:44px; background:var(--white); color:var(--ground); font-size:32px; font-weight:600; display:flex; align-items:center; }
+</style>
+</head>
+<body>
+  <div class="field"><div class="blob one"></div><div class="blob two"></div></div>
+  <div class="scrim"></div>
+  <header><span>Popcorn AI</span><span class="clock">23:12</span></header>
+  <div class="title"><div class="poster"></div><div><h1>How was Project Hail Mary?</h1><div class="sub">Popcorn remembers this for your next movie night.</div></div></div>
+  <div class="cols">
+    <div class="col"><span class="disc" style="background:#8A5A12">B<span class="badge"></span></span><span class="name">Bedirhan</span>
+      <div class="opts"><span class="opt set">Loved it</span><span class="opt">It was fine</span><span class="opt">Not for me</span></div></div>
+    <div class="col"><span class="disc" style="background:#4A5A72">A</span><span class="name">Ayse</span>
+      <div class="opts"><span class="opt">Loved it</span><span class="opt focus">It was fine</span><span class="opt">Not for me</span></div></div>
+    <div class="col"><span class="disc" style="background:#A3415F">C</span><span class="name">Can, 9</span>
+      <div class="opts"><span class="opt">Loved it</span><span class="opt">It was fine</span><span class="opt">Not for me</span></div></div>
+  </div>
+  <div class="hint">Or just say "Can loved it" · Back: skip for now</div>
+  <div class="save">Save</div>
+</body>
+</html>

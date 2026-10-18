@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Voice roster · how was it</title>
+<style>
+  :root { --ground:#0B0D12; --white:#FFFFFF; --mute:#B4BCCB; --dim:#8F98AB; --field:#1C2230; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--ground); color:var(--white);
+    font-family:-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif; }
+  .field { position:absolute; inset:-200px; filter:blur(160px); }
+  .blob { position:absolute; border-radius:50%; }
+  .blob.one { width:1100px; height:700px; left:800px; top:250px; background:#2C5C78; opacity:0.5; }
+  .blob.two { width:600px; height:500px; left:1450px; top:600px; background:#96582E; opacity:0.35; }
+  header { position:absolute; left:96px; right:96px; top:54px; display:flex; justify-content:space-between; align-items:center; font-size:28px; font-weight:500; }
+  .clock { color:var(--mute); font-size:24px; }
+  /* Poster stand-in; the app shows the TMDB poster. */
+  .poster { position:absolute; left:96px; top:236px; width:340px; height:510px; border-radius:14px; display:flex; align-items:flex-end; padding:20px;
+    font-size:20px; font-weight:700; letter-spacing:0.02em; background:linear-gradient(160deg, #1E4E5C 0%, #C46A2A 60%, #2A1A12 100%); }
+  .main { position:absolute; left:500px; top:220px; width:1324px; }
+  h1 { font-size:56px; font-weight:600; letter-spacing:-0.02em; }
+  .sub { margin-top:12px; font-size:26px; color:var(--mute); }
+  .rows { margin-top:40px; display:flex; flex-direction:column; gap:16px; }
+  .row { display:flex; align-items:center; gap:24px; min-height:120px; padding:20px 28px; border-radius:20px; }
+  .row.on { background:rgba(28,34,48,0.85); box-shadow:inset 0 0 0 3px var(--white); }
+  .disc { width:72px; height:72px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:600; flex:none; }
+  .who { width:190px; flex:none; font-size:30px; font-weight:600; }
+  .said { flex:1; }
+  .said q { font-size:28px; line-height:1.35; font-weight:500; }
+  .said .v { margin-top:10px; display:inline-flex; height:40px; padding:0 16px; border-radius:20px; background:var(--white); color:var(--ground); font-size:20px; font-weight:600; align-items:center; }
+  .listen { display:flex; align-items:center; gap:16px; font-size:28px; font-weight:500; }
+  .bars { display:flex; gap:6px; align-items:center; height:40px; }
+  .bars span { width:6px; border-radius:3px; background:var(--white); }
+  .wait { font-size:26px; color:var(--dim); }
+  .hand { flex:none; height:52px; padding:0 22px; border-radius:26px; display:flex; align-items:center; font-size:22px; font-weight:500; color:var(--mute); box-shadow:inset 0 0 0 2px rgba(255,255,255,0.25); }
+  .opts { display:flex; gap:12px; flex:none; }
+  .opt { height:52px; padding:0 22px; border-radius:26px; display:flex; align-items:center; font-size:22px; font-weight:500; color:var(--mute); box-shadow:inset 0 0 0 2px rgba(255,255,255,0.25); }
+  .opt.focus { background:var(--white); color:var(--ground); font-weight:600; box-shadow:none; }
+  .save { position:absolute; right:96px; bottom:60px; height:88px; padding:0 48px; border-radius:44px; background:var(--white); color:var(--ground); font-size:32px; font-weight:600; display:flex; align-items:center; }
+  .hint { position:absolute; left:96px; bottom:88px; font-size:22px; color:var(--dim); }
+</style>
+</head>
+<body>
+  <div class="field"><div class="blob one"></div><div class="blob two"></div></div>
+  <header><span>Popcorn AI</span><span class="clock">23:12</span></header>
+  <div class="poster">PROJECT HAIL MARY</div>
+  <div class="main">
+    <h1>How was Project Hail Mary?</h1>
+    <div class="sub">Popcorn asks each of you in turn. Just answer out loud.</div>
+    <div class="rows">
+      <div class="row"><span class="disc" style="background:#8A5A12">B</span><span class="who">Bedirhan</span>
+        <div class="said"><q>Loved it. The science bits were great and Rocky stole the show.</q><br><span class="v">Loved it</span></div>
+        <span class="hand">Rate by hand</span></div>
+      <div class="row"><span class="disc" style="background:#4A5A72">A</span><span class="who">Ayse</span>
+        <div class="said listen"><span class="bars"><span style="height:14px"></span><span style="height:34px"></span><span style="height:24px"></span><span style="height:12px"></span></span>Listening to Ayse…</div>
+        <span class="hand">Rate by hand</span></div>
+      <div class="row on"><span class="disc" style="background:#A3415F">C</span><span class="who">Can, 9</span>
+        <div class="said wait">Next</div>
+        <div class="opts"><span class="opt focus">Loved it</span><span class="opt">It was fine</span><span class="opt">Not for me</span></div></div>
+    </div>
+  </div>
+  <div class="hint">Back: skip for now · OK on a row: rate by hand</div>
+  <div class="save">Save</div>
+</body>
+</html>

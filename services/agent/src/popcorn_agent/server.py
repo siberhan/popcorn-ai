@@ -16,7 +16,7 @@ from starlette.routing import Route
 from .agent import AgentServiceError, PopcornAgentService
 from .config import Settings, load_settings
 from .polly import PollyServiceError, PollySpeaker, PollyValidationError
-from .store import InMemoryConversationStore
+from .store import DynamoKeyValue, MemoryKeyValue, SessionStore
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +28,18 @@ def create_app(
 ) -> Starlette:
     """Create and configure the Starlette application."""
     conf = settings or load_settings()
-    store = InMemoryConversationStore()
+
+    def sessions() -> SessionStore:
+        kv = DynamoKeyValue(conf.popcorn_table, conf.aws_region) if conf.popcorn_table else MemoryKeyValue()
+        return SessionStore(kv, conf.popcorn_household)
 
     service = agent_service or PopcornAgentService(
         api_key=conf.openrouter_api_key,
         model_id=conf.openrouter_model,
         mcp_url=conf.mcp_url,
-        store=store,
+        sessions=sessions(),
+        turn_timeout=conf.turn_timeout,
+        max_tool_calls=conf.max_tool_calls,
     )
 
     speaker = polly_speaker or PollySpeaker(
@@ -98,6 +103,37 @@ def create_app(
                 {"error": "An internal error occurred while processing the request."},
                 status_code=502,
             )
+
+    async def event(request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+        if not isinstance(body, dict) or not isinstance(body.get("event"), str):
+            return JSONResponse({"error": "event is required."}, status_code=400)
+        name = body.get("name")
+        try:
+            result = await service.event(
+                body["event"],
+                name=str(name) if name is not None else None,
+                skipped=bool(body.get("skipped", False)),
+            )
+            return JSONResponse(result)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        except AgentServiceError as exc:
+            logger.error("Agent error in /event: %s", exc)
+            return JSONResponse({"error": str(exc)}, status_code=502)
+        except Exception as exc:
+            logger.exception("Unexpected error in /event: %s", exc)
+            return JSONResponse({"error": "An internal error occurred while processing the request."}, status_code=502)
+
+    async def session_new(request: Request) -> JSONResponse:
+        try:
+            return JSONResponse({"id": await service.new_session()})
+        except Exception as exc:
+            logger.exception("Could not start a session: %s", exc)
+            return JSONResponse({"error": "Could not start a new session."}, status_code=502)
 
     async def chat_stream(request: Request) -> Response:
         try:
@@ -190,6 +226,8 @@ def create_app(
         Route("/health", health, methods=["GET"]),
         Route("/chat", chat, methods=["POST"]),
         Route("/chat/stream", chat_stream, methods=["POST"]),
+        Route("/event", event, methods=["POST"]),
+        Route("/session/new", session_new, methods=["POST"]),
         Route("/speak", speak, methods=["POST"]),
     ]
 

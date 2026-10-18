@@ -1,101 +1,91 @@
-"""Tests for conversation memory store."""
+"""Tests for the household session store and the size rule."""
 
-import time
-from popcorn_agent.store import InMemoryConversationStore
+import asyncio
+import json
 
-
-def test_create_id():
-    store = InMemoryConversationStore()
-    cid1 = store.create_id()
-    cid2 = store.create_id()
-    assert cid1.startswith("c_")
-    assert cid2.startswith("c_")
-    assert cid1 != cid2
+from popcorn_agent.store import OMITTED, MemoryKeyValue, SessionStore, couch_from, doc_size, trim
 
 
-def test_save_and_retrieve_messages():
-    store = InMemoryConversationStore()
-    cid = store.create_id()
-    messages = [
-        {"role": "user", "content": [{"text": "Hello"}]},
-        {"role": "assistant", "content": [{"text": "Hi there"}]},
+def run(coro):
+    return asyncio.run(coro)
+
+
+def prompt(text):
+    return {"role": "user", "content": [{"text": text}]}
+
+
+def tool_turn(i, tool, result, inp=None, pad=0):
+    return [
+        prompt(f"turn {i}" + " " * pad),
+        {"role": "assistant", "content": [{"toolUse": {"name": tool, "toolUseId": f"u{i}", "input": inp or {}}}]},
+        {"role": "user", "content": [{"toolResult": {"toolUseId": f"u{i}", "status": "success",
+                                                     "content": [{"text": json.dumps(result)}]}}]},
+        {"role": "assistant", "content": [{"text": f"reply {i}"}]},
     ]
-    store.save_messages(cid, messages)
-    retrieved = store.get_messages(cid)
-    assert len(retrieved) == 2
-    assert retrieved[0]["role"] == "user"
-    assert retrieved[1]["content"][0]["text"] == "Hi there"
 
 
-def test_message_capping():
-    max_msgs = 5
-    store = InMemoryConversationStore(max_messages=max_msgs)
-    cid = store.create_id()
-    messages = [{"role": "user", "index": i} for i in range(10)]
-    store.save_messages(cid, messages)
-    retrieved = store.get_messages(cid)
-    assert len(retrieved) == max_msgs
-    # Verify it kept the LAST 5 messages
-    assert [m["index"] for m in retrieved] == [5, 6, 7, 8, 9]
+def test_load_save_and_idle_reset():
+    store = SessionStore(MemoryKeyValue(), "h")
+    s = run(store.load(now=1000))
+    s.messages = [prompt("hi")]
+    run(store.save(s, now=1000))
+    again = run(store.load(now=1000 + 3 * 3600))
+    assert again.id == s.id and again.messages == [prompt("hi")]
+    fresh = run(store.load(now=1001 + 3 * 3600 + 1000))
+    assert fresh.id != s.id and fresh.messages == []
 
 
-def test_idle_ttl_expiration(monkeypatch):
-    current_time = 1000.0
-    monkeypatch.setattr(time, "time", lambda: current_time)
-
-    store = InMemoryConversationStore(ttl_seconds=60)
-    cid = store.create_id()
-    store.save_messages(cid, [{"role": "user", "text": "test"}])
-
-    assert len(store.get_messages(cid)) == 1
-
-    # Advance time beyond TTL
-    current_time = 1065.0
-    assert store.get_messages(cid) == []
+def test_new_session_replaces_the_household_one():
+    store = SessionStore(MemoryKeyValue(), "h")
+    s = run(store.load())
+    s.messages = [prompt("hi")]
+    run(store.save(s))
+    new = run(store.new())
+    loaded = run(store.load())
+    assert loaded.id == new.id != s.id and loaded.messages == []
 
 
-def test_tool_pair_safe_truncation_24_messages():
-    """Verify that a 24-message history containing tool pairs cuts cleanly at a user text message."""
-    store = InMemoryConversationStore(max_messages=20)
-    cid = store.create_id()
+def test_under_the_limit_nothing_changes():
+    msgs = tool_turn(0, "find_candidates", {"candidates": [1, 2]})
+    assert trim(msgs, 10_000) == msgs
 
-    messages = [
-        # Turn 0: plain turn (2 messages, idx 0..1)
-        {"role": "user", "content": [{"text": "Turn 0 prompt"}]},
-        {"role": "assistant", "content": [{"text": "Turn 0 reply"}]},
-        # Turn 1: tool turn (4 messages, idx 2..5)
-        {"role": "user", "content": [{"text": "Turn 1 prompt"}]},
-        {"role": "assistant", "content": [{"toolUse": {"name": "tool1", "toolUseId": "call_1", "input": {}}}]},
-        {"role": "user", "content": [{"toolResult": {"toolUseId": "call_1", "status": "success"}}]},
-        {"role": "assistant", "content": [{"text": "Turn 1 final answer"}]},
-    ]
-    # Add 4 more tool turns (each 4 messages) -> 2 + 4 + 16 = 22, plus 2 more = 24 messages
-    for i in range(2, 6):
-        messages.extend([
-            {"role": "user", "content": [{"text": f"Turn {i} prompt"}]},
-            {"role": "assistant", "content": [{"toolUse": {"name": f"tool{i}", "toolUseId": f"call_{i}", "input": {}}}]},
-            {"role": "user", "content": [{"toolResult": {"toolUseId": f"call_{i}", "status": "success"}}]},
-            {"role": "assistant", "content": [{"text": f"Turn {i} final answer"}]},
-        ])
-    # Add final plain turn (2 messages) to reach 24 total messages
-    messages.extend([
-        {"role": "user", "content": [{"text": "Final user query"}]},
-        {"role": "assistant", "content": [{"text": "Final assistant reply"}]},
-    ])
 
-    assert len(messages) == 24
+def test_old_lists_are_omitted_first_newest_turn_kept():
+    big = {"candidates": [{"id": i, "overview": "x" * 150} for i in range(40)]}
+    msgs = tool_turn(0, "find_candidates", big) + tool_turn(1, "duel_candidates", big) + tool_turn(2, "find_candidates", big)
+    limit = doc_size(msgs) - 1000
+    out = trim(msgs, limit)
+    texts = [b["toolResult"]["content"][0]["text"] for m in out for b in m["content"] if "toolResult" in b]
+    assert texts[0] == OMITTED and texts[1] != OMITTED and texts[2] != OMITTED
+    assert len(out) == 12 and doc_size(out) <= limit
 
-    # With max_messages=20, a naive messages[-20:] starts at index 4 (which is a user toolResult!)
-    assert "toolResult" in messages[-20]["content"][0]
 
-    store.save_messages(cid, messages)
-    saved = store.get_messages(cid)
+def test_then_oldest_turns_go_but_couch_memory_stays():
+    memory = {"memory": [{"name": "Leyla", "notes": [], "new": True}]}
+    msgs = (tool_turn(0, "set_couch", memory, {"people": [{"name": "Leyla"}]})
+            + tool_turn(1, "get_movie_details", {"x": 1}, pad=3000)
+            + tool_turn(2, "get_movie_details", {"x": 2}, pad=3000)
+            + tool_turn(3, "get_movie_details", {"x": 3}, pad=3000))
+    out = trim(msgs, doc_size(msgs) - 5000)
+    first_texts = [m["content"][0]["text"].strip() for m in out if m["role"] == "user" and "text" in m["content"][0]]
+    assert first_texts == ["turn 0", "turn 3"]
+    assert out[0]["role"] == "user" and "text" in out[0]["content"][0]
 
-    # Saved history must start with a plain user text message
-    assert len(saved) < 20
-    first_msg = saved[0]
-    assert first_msg["role"] == "user"
-    assert "text" in first_msg["content"][0]
-    assert not any("toolResult" in block for block in first_msg["content"])
-    assert first_msg["content"][0]["text"] == "Turn 2 prompt"
 
+def test_memory_of_someone_who_left_can_go():
+    memory = {"memory": [{"name": "Leyla", "notes": [], "new": True}]}
+    msgs = (tool_turn(0, "set_couch", memory, {"people": [{"name": "Leyla"}]}, pad=3000)
+            + tool_turn(1, "remove_from_couch", {"ok": True}, {"name": "Leyla"})
+            + tool_turn(2, "get_movie_details", {"x": 2}))
+    assert couch_from(msgs) == set()
+    out = trim(msgs, doc_size(msgs) - 2000)
+    assert out[0]["content"][0]["text"] == "turn 1"
+
+
+def test_dynamo_doc_shape_matches_the_mcp_store():
+    kv = MemoryKeyValue()
+    store = SessionStore(kv, "h")
+    s = run(store.load())
+    run(store.save(s))
+    doc = run(kv.get("h:session"))
+    assert set(doc) == {"id", "messages", "last_active"}

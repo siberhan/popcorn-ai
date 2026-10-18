@@ -1,29 +1,28 @@
 import React, { useRef } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  Animated,
-} from 'react-native';
-import {
-  SpatialNavigationFocusableView,
-  SpatialNavigationNode,
-  DefaultFocus,
-} from 'react-tv-space-navigation';
+import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
+import { SpatialNavigationFocusableView, SpatialNavigationNode, DefaultFocus } from 'react-tv-space-navigation';
 import { TVState, MovieCard } from '../types';
 import { colors, typography, radius, safeZones } from '../../theme';
 import { scaledPixels } from '../../hooks/useScale';
-import {
-  CouchBar,
-  PosterCard,
-  avatarColorForName,
-  initialsForName,
-} from '../components';
+import { CouchBar, PosterCard, avatarColorForName, initialsForName } from '../components';
 
 export interface DuelScreenProps {
   state: TVState;
-  onPick?: (side: 'left' | 'right') => void;
+  /** 'skip' ends the duel (Skip pill). */
+  onPick?: (side: 'left' | 'right' | 'skip') => void;
+}
+
+/** Skip pill: reachable with Up from the posters, never the default focus. */
+function SkipPill({ onSelect }: { onSelect: () => void }) {
+  return (
+    <SpatialNavigationFocusableView onSelect={onSelect}>
+      {({ isFocused }) => (
+        <Pressable onPress={onSelect} style={[styles.skipPill, isFocused && styles.skipPillFocused]}>
+          <Text style={[styles.skipText, isFocused && styles.skipTextFocused]}>Skip the duel</Text>
+        </Pressable>
+      )}
+    </SpatialNavigationFocusableView>
+  );
 }
 
 interface DuelPosterOptionProps {
@@ -58,34 +57,14 @@ function DuelPosterOption({ movie, side, onPick }: DuelPosterOptionProps) {
     >
       {({ isFocused }) => (
         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          <Pressable
-            onPress={handleSelect}
-            style={[
-              styles.duelCard,
-              isFocused && styles.duelCardFocused,
-            ]}
-          >
+          <Pressable onPress={handleSelect} style={[styles.duelCard, isFocused && styles.duelCardFocused]}>
             <View style={styles.sideLabelRow}>
-              <View
-                style={[
-                  styles.sideBadge,
-                  isFocused && styles.sideBadgeFocused,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.sideBadgeText,
-                    isFocused && styles.sideBadgeTextFocused,
-                  ]}
-                >
+              <View style={[styles.sideBadge, isFocused && styles.sideBadgeFocused]}>
+                <Text style={[styles.sideBadgeText, isFocused && styles.sideBadgeTextFocused]}>
                   {side === 'left' ? 'LEFT OPTION' : 'RIGHT OPTION'}
                 </Text>
               </View>
-              {movie.rating ? (
-                <Text style={styles.ratingText}>
-                  TMDB {movie.rating.toFixed(1)}
-                </Text>
-              ) : null}
+              {movie.rating ? <Text style={styles.ratingText}>TMDB {movie.rating.toFixed(1)}</Text> : null}
             </View>
 
             <View style={styles.posterCenter}>
@@ -103,9 +82,7 @@ function DuelPosterOption({ movie, side, onPick }: DuelPosterOptionProps) {
               <Text style={styles.movieTitle} numberOfLines={1}>
                 {movie.title}
               </Text>
-              <Text style={styles.movieYear}>
-                {movie.year || 'Classic'}
-              </Text>
+              <Text style={styles.movieYear}>{movie.year || 'Classic'}</Text>
 
               <View style={styles.genresRow}>
                 {(movie.genres || []).slice(0, 3).map((g) => (
@@ -116,21 +93,9 @@ function DuelPosterOption({ movie, side, onPick }: DuelPosterOptionProps) {
               </View>
             </View>
 
-            <View
-              style={[
-                styles.pickCallout,
-                isFocused && styles.pickCalloutFocused,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.pickCalloutText,
-                  isFocused && styles.pickCalloutTextFocused,
-                ]}
-              >
-                {isFocused
-                  ? `Press Select or say "${side}" to pick`
-                  : `D-pad ${side} or say "${side}"`}
+            <View style={[styles.pickCallout, isFocused && styles.pickCalloutFocused]}>
+              <Text style={[styles.pickCalloutText, isFocused && styles.pickCalloutTextFocused]}>
+                {isFocused ? `Press Select or say "${side}" to pick` : `D-pad ${side} or say "${side}"`}
               </Text>
             </View>
           </Pressable>
@@ -147,11 +112,7 @@ export default function DuelScreen({ state, onPick }: DuelScreenProps) {
   if (!duel || !Array.isArray(duel.pair) || duel.pair.length < 2) {
     return (
       <View style={styles.screen}>
-        <CouchBar
-          members={members}
-          screen={state.screen}
-          message={state.message}
-        />
+        <CouchBar members={members} screen={state.screen} message={state.message} />
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>No poster duel active</Text>
           <Text style={styles.emptySub}>
@@ -169,72 +130,64 @@ export default function DuelScreen({ state, onPick }: DuelScreenProps) {
 
   return (
     <View style={styles.screen}>
-      <CouchBar
-        members={members}
-        screen={state.screen}
-        message={state.message}
-      />
+      <CouchBar members={members} screen={state.screen} message={state.message} />
 
-      {/* Duel Header */}
-      <View style={styles.duelHeader}>
-        <View style={styles.duelPersonCluster}>
-          <View style={[styles.duelAvatar, { backgroundColor: avatarBg }]}>
-            <Text style={styles.duelAvatarText}>{initials}</Text>
-          </View>
-          <View>
-            <Text style={styles.duelHeadline}>
-              {duel.name}, pick a poster
-            </Text>
-            <Text style={styles.duelSub}>
-              Which vibe sounds more like you? Use D-pad Left/Right + Select, or say &quot;left&quot; or &quot;right&quot;.
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.roundCluster}>
-          <View style={styles.roundBadge}>
-            <Text style={styles.roundBadgeText}>
-              Round {currentRound} of {duel.total}
-            </Text>
-          </View>
-          <View style={styles.roundDots}>
-            {Array.from({ length: duel.total }).map((_, idx) => (
-              <View
-                key={idx}
-                style={[
-                  styles.roundDot,
-                  idx < currentRound && styles.roundDotActive,
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-      </View>
-
-      {/* Two Big Posters Side by Side */}
-      <SpatialNavigationNode orientation="horizontal">
-        <View style={styles.duelArena}>
-          <DefaultFocus>
-            <DuelPosterOption
-              movie={leftMovie}
-              side="left"
-              onPick={onPick}
-            />
-          </DefaultFocus>
-
-          <View style={styles.vsColumn}>
-            <View style={styles.vsLine} />
-            <View style={styles.vsCircle}>
-              <Text style={styles.vsText}>OR</Text>
+      {/* Header (with the Skip pill) above the posters: Up from a poster reaches Skip. */}
+      <SpatialNavigationNode orientation="vertical">
+        <View style={styles.duelFill}>
+          <View style={styles.duelHeader}>
+            <View style={styles.duelPersonCluster}>
+              <View style={[styles.duelAvatar, { backgroundColor: avatarBg }]}>
+                <Text style={styles.duelAvatarText}>{initials}</Text>
+              </View>
+              <View>
+                <Text style={styles.duelHeadline}>{duel.name}, pick a poster</Text>
+                <Text style={styles.duelSub}>
+                  Which one sounds more like you? Left/Right and OK to pick, or say &quot;left&quot; or
+                  &quot;right&quot;. Up: skip.
+                </Text>
+              </View>
             </View>
-            <View style={styles.vsLine} />
+
+            <View style={styles.roundCluster}>
+              <View style={styles.roundRow}>
+                {onPick ? (
+                  <View style={styles.skipWrap}>
+                    <SkipPill onSelect={() => onPick('skip')} />
+                  </View>
+                ) : null}
+                <View style={styles.roundBadge}>
+                  <Text style={styles.roundBadgeText}>
+                    Round {currentRound} of {duel.total}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.roundDots}>
+                {Array.from({ length: duel.total }).map((_, idx) => (
+                  <View key={idx} style={[styles.roundDot, idx < currentRound && styles.roundDotActive]} />
+                ))}
+              </View>
+            </View>
           </View>
 
-          <DuelPosterOption
-            movie={rightMovie}
-            side="right"
-            onPick={onPick}
-          />
+          {/* Two Big Posters Side by Side */}
+          <SpatialNavigationNode orientation="horizontal">
+            <View style={styles.duelArena}>
+              <DefaultFocus>
+                <DuelPosterOption movie={leftMovie} side="left" onPick={onPick} />
+              </DefaultFocus>
+
+              <View style={styles.vsColumn}>
+                <View style={styles.vsLine} />
+                <View style={styles.vsCircle}>
+                  <Text style={styles.vsText}>OR</Text>
+                </View>
+                <View style={styles.vsLine} />
+              </View>
+
+              <DuelPosterOption movie={rightMovie} side="right" onPick={onPick} />
+            </View>
+          </SpatialNavigationNode>
         </View>
       </SpatialNavigationNode>
     </View>
@@ -303,6 +256,37 @@ const styles = StyleSheet.create({
   roundCluster: {
     alignItems: 'flex-end',
   },
+  duelFill: {
+    flex: 1,
+  },
+  roundRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: scaledPixels(10),
+  },
+  skipWrap: {
+    marginRight: scaledPixels(16),
+  },
+  skipPill: {
+    borderWidth: scaledPixels(2),
+    borderColor: colors.border.default,
+    borderRadius: radius.full,
+    paddingHorizontal: scaledPixels(24),
+    paddingVertical: scaledPixels(8),
+  },
+  skipPillFocused: {
+    backgroundColor: colors.text.primary,
+    borderColor: colors.text.primary,
+    transform: [{ scale: 1.06 }],
+  },
+  skipText: {
+    color: colors.text.secondary,
+    fontSize: scaledPixels(22),
+    fontWeight: typography.fontWeight.bold,
+  },
+  skipTextFocused: {
+    color: colors.bg.canvas,
+  },
   roundBadge: {
     backgroundColor: colors.bg.surface,
     borderWidth: 1.5,
@@ -310,7 +294,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     paddingHorizontal: scaledPixels(20),
     paddingVertical: scaledPixels(8),
-    marginBottom: scaledPixels(10),
   },
   roundBadgeText: {
     color: colors.accent.popcorn,

@@ -33,6 +33,10 @@ class Settings:
     polly_engine: str
     host: str
     port: int
+    popcorn_table: str = ""  # empty: in-memory session store (tests, local runs)
+    popcorn_household: str = "demo"
+    turn_timeout: float = 60.0
+    max_tool_calls: int = 12
 
 
 def load_settings() -> Settings:
@@ -47,5 +51,9 @@ def load_settings() -> Settings:
         polly_engine=os.environ.get("POLLY_ENGINE", "standard"),
         host=os.environ.get("HOST", "127.0.0.1"),
         port=int(os.environ.get("PORT", "8100")),
+        popcorn_table=os.environ.get("POPCORN_TABLE", "").strip(),
+        popcorn_household=os.environ.get("POPCORN_HOUSEHOLD", "demo").strip() or "demo",
+        turn_timeout=float(os.environ.get("TURN_TIMEOUT", "60")),
+        max_tool_calls=int(os.environ.get("MAX_TOOL_CALLS", "12")),
     )
 

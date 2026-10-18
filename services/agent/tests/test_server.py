@@ -160,3 +160,41 @@ def test_speak_polly_error(client, mock_polly_speaker):
     response = client.post("/speak", json={"text": "Hello"})
     assert response.status_code == 502
     assert "Polly communication failed." in response.json()["error"]
+
+
+def test_event_endpoint(client, mock_agent_service):
+    seen = {}
+
+    async def mock_event(event, name=None, skipped=False):
+        seen.update(event=event, name=name, skipped=skipped)
+        return {"conversation_id": "s_1", "reply": "Nice picks, Leyla.", "steps": [], "ms_total": 10}
+
+    mock_agent_service.event = mock_event
+    response = client.post("/event", json={"event": "duel_done", "name": "Leyla", "skipped": True})
+    assert response.status_code == 200 and response.json()["reply"] == "Nice picks, Leyla."
+    assert seen == {"event": "duel_done", "name": "Leyla", "skipped": True}
+
+
+def test_event_validation(client, mock_agent_service):
+    async def mock_event(event, name=None, skipped=False):
+        raise ValueError("name is required for duel_done")
+
+    mock_agent_service.event = mock_event
+    assert client.post("/event", json={}).status_code == 400
+    response = client.post("/event", json={"event": "duel_done"})
+    assert response.status_code == 400 and "name" in response.json()["error"]
+
+
+def test_session_new_endpoint(client, mock_agent_service):
+    async def mock_new():
+        return "s_abc"
+
+    mock_agent_service.new_session = mock_new
+    response = client.post("/session/new")
+    assert response.status_code == 200 and response.json() == {"id": "s_abc"}
+
+
+def test_cors_preflight_on_event(client):
+    response = client.options("/event", headers={"Origin": "http://tv.local", "Access-Control-Request-Method": "POST"})
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] in ("*", "http://tv.local")

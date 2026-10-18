@@ -1146,6 +1146,37 @@ input {
   white-space: nowrap;
 }
 
+/* TV Rating View */
+.tv-rating-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tv-rating-row {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tv-rating-row strong {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tv-rating-row[data-status="asking"] {
+  color: var(--color-accent-popcorn);
+}
+
+.tv-rating-row[data-status="answered"] {
+  color: var(--color-status-success);
+}
+
 /* TV Duel View */
 .tv-duel-header {
   display: flex;

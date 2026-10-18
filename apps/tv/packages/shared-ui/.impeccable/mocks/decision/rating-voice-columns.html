@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Voice columns · how was it</title>
+<style>
+  :root { --ground:#0B0D12; --white:#FFFFFF; --mute:#B4BCCB; --dim:#8F98AB; --field:#1C2230; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--ground); color:var(--white);
+    font-family:-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif; }
+  .field { position:absolute; inset:-200px; filter:blur(150px); }
+  .blob { position:absolute; border-radius:50%; }
+  .blob.one { width:900px; height:800px; left:1100px; top:120px; background:#2C5C78; opacity:0.6; }
+  .blob.two { width:700px; height:600px; left:1500px; top:640px; background:#96582E; opacity:0.4; }
+  .scrim { position:absolute; inset:0; background:linear-gradient(90deg, rgba(11,13,18,0.95) 0%, rgba(11,13,18,0.7) 40%, rgba(11,13,18,0.15) 75%); }
+  header { position:absolute; left:96px; right:96px; top:54px; display:flex; justify-content:space-between; align-items:center; font-size:28px; font-weight:500; }
+  .clock { color:var(--mute); font-size:24px; }
+  .title { position:absolute; left:96px; top:180px; display:flex; gap:32px; align-items:center; }
+  /* Poster stand-in; the app shows the TMDB poster. */
+  .poster { width:110px; height:165px; border-radius:10px; background:linear-gradient(160deg, #1E4E5C 0%, #C46A2A 60%, #2A1A12 100%); }
+  h1 { font-size:60px; font-weight:600; letter-spacing:-0.02em; }
+  .sub { margin-top:10px; font-size:26px; color:var(--mute); }
+  .cols { position:absolute; left:96px; top:420px; display:flex; gap:56px; }
+  .col { width:420px; display:flex; flex-direction:column; align-items:flex-start; }
+  .top { display:flex; align-items:center; gap:22px; }
+  .disc { width:120px; height:120px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:42px; font-weight:600; position:relative; flex:none; }
+  .disc.on { box-shadow:0 0 0 6px var(--ground), 0 0 0 12px var(--white); }
+  .name { font-size:30px; font-weight:600; }
+  .state { margin-top:6px; font-size:22px; color:var(--mute); }
+  .v { display:inline-flex; height:38px; padding:0 14px; border-radius:19px; background:var(--white); color:var(--ground); font-size:20px; font-weight:600; align-items:center; margin-top:6px; }
+  .bubble { margin-top:28px; padding:24px 28px; border-radius:22px; background:rgba(28,34,48,0.85); font-size:26px; line-height:1.4; font-weight:500; width:100%; }
+  .bubble.live { color:var(--mute); }
+  .bars { display:inline-flex; gap:5px; align-items:center; height:28px; margin-right:12px; vertical-align:middle; }
+  .bars span { width:5px; border-radius:3px; background:var(--white); }
+  .opts { margin-top:28px; display:flex; flex-direction:column; gap:12px; width:100%; }
+  .opt { height:58px; padding:0 24px; border-radius:29px; display:flex; align-items:center; font-size:24px; font-weight:500; color:var(--mute); box-shadow:inset 0 0 0 2px rgba(255,255,255,0.22); }
+  .opt.focus { background:var(--white); color:var(--ground); font-weight:600; box-shadow:none; }
+  .hint { position:absolute; left:96px; bottom:84px; font-size:22px; color:var(--dim); }
+  .save { position:absolute; right:96px; bottom:60px; height:88px; padding:0 48px; border-radius:44px; background:var(--white); color:var(--ground); font-size:32px; font-weight:600; display:flex; align-items:center; }
+</style>
+</head>
+<body>
+  <div class="field"><div class="blob one"></div><div class="blob two"></div></div>
+  <div class="scrim"></div>
+  <header><span>Popcorn AI</span><span class="clock">23:12</span></header>
+  <div class="title"><div class="poster"></div><div><h1>How was Project Hail Mary?</h1><div class="sub">Popcorn asks each of you. Just answer out loud.</div></div></div>
+  <div class="cols">
+    <div class="col">
+      <div class="top"><span class="disc" style="background:#8A5A12">B</span><div><div class="name">Bedirhan</div><span class="v">Loved it</span></div></div>
+      <div class="bubble">"Loved it. The science bits were great and Rocky stole the show."</div>
+    </div>
+    <div class="col">
+      <div class="top"><span class="disc" style="background:#4A5A72">A</span><div><div class="name">Ayse</div><div class="state">Speaking now</div></div></div>
+      <div class="bubble live"><span class="bars"><span style="height:10px"></span><span style="height:24px"></span><span style="height:16px"></span><span style="height:8px"></span></span>"A bit long, but the friendship with Rocky…"</div>
+    </div>
+    <div class="col">
+      <div class="top"><span class="disc on" style="background:#A3415F">C</span><div><div class="name">Can, 9</div><div class="state">Rating by hand</div></div></div>
+      <div class="opts"><span class="opt focus">Loved it</span><span class="opt">It was fine</span><span class="opt">Not for me</span></div>
+    </div>
+  </div>
+  <div class="hint">OK on a person: rate by hand · Back: skip for now</div>
+  <div class="save">Save</div>
+</body>
+</html>

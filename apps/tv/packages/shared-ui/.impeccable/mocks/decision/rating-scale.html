@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scale · how was it</title>
+<style>
+  :root { --ground:#0B0D12; --white:#FFFFFF; --mute:#B4BCCB; --dim:#8F98AB; --field:#1C2230; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--ground); color:var(--white);
+    font-family:-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif; }
+  .field { position:absolute; inset:-200px; filter:blur(170px); }
+  .blob { position:absolute; border-radius:50%; }
+  .blob.one { width:900px; height:700px; left:710px; top:260px; background:#4A5A72; opacity:0.7; }
+  .blob.two { width:600px; height:500px; left:1300px; top:600px; background:#96582E; opacity:0.3; }
+  header { position:absolute; left:96px; right:96px; top:54px; display:flex; justify-content:space-between; align-items:center; font-size:28px; font-weight:500; }
+  .film { display:flex; align-items:center; gap:18px; color:var(--mute); font-size:24px; }
+  /* Poster stand-in; the app shows the TMDB poster. */
+  .film i { width:44px; height:66px; border-radius:6px; background:linear-gradient(160deg, #1E4E5C 0%, #C46A2A 60%, #2A1A12 100%); }
+  .center { position:absolute; left:0; right:0; top:190px; text-align:center; }
+  .disc { margin:0 auto; width:220px; height:220px; border-radius:50%; background:#4A5A72; display:flex; align-items:center; justify-content:center; font-size:76px; font-weight:600;
+    box-shadow:0 30px 60px rgba(0,0,0,0.5); }
+  h1 { margin-top:44px; font-size:56px; font-weight:600; letter-spacing:-0.02em; }
+  .sub { margin-top:12px; font-size:26px; color:var(--mute); }
+  .scale { margin:56px auto 0; display:flex; gap:20px; justify-content:center; }
+  .step { width:220px; height:120px; border-radius:20px; background:rgba(28,34,48,0.85); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:16px; }
+  .step b { font-size:40px; font-weight:600; }
+  .step span { font-size:22px; color:var(--mute); }
+  .step.on { background:var(--white); color:var(--ground); transform:scale(1.08); box-shadow:0 24px 50px rgba(0,0,0,0.5); }
+  .step.on span { color:#3A4150; }
+  .progress { position:absolute; left:0; right:0; bottom:120px; display:flex; justify-content:center; gap:14px; align-items:center; font-size:24px; color:var(--mute); }
+  .progress u { width:40px; height:40px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; font-size:18px; font-weight:600; color:var(--white); }
+  .progress u.done { box-shadow:0 0 0 3px var(--ground), 0 0 0 5px var(--white); }
+  .progress u.later { opacity:0.45; }
+  .hint { position:absolute; left:96px; right:96px; bottom:54px; display:flex; justify-content:space-between; font-size:22px; color:var(--dim); }
+</style>
+</head>
+<body>
+  <div class="field"><div class="blob one"></div><div class="blob two"></div></div>
+  <header><span>Popcorn AI</span><span class="film"><i></i>Project Hail Mary · 23:12</span></header>
+  <div class="center">
+    <div class="disc">A</div>
+    <h1>Ayse, how was it?</h1>
+    <div class="sub">Bedirhan loved it. Your turn.</div>
+    <div class="scale">
+      <div class="step"><b>1</b><span>Not for me</span></div>
+      <div class="step"><b>2</b><span>Meh</span></div>
+      <div class="step"><b>3</b><span>It was fine</span></div>
+      <div class="step on"><b>4</b><span>Really liked it</span></div>
+      <div class="step"><b>5</b><span>Loved it</span></div>
+    </div>
+  </div>
+  <div class="progress"><u class="done" style="background:#8A5A12">B</u><u style="background:#4A5A72">A</u><u class="later" style="background:#A3415F">C</u><span>2 of 3</span></div>
+  <div class="hint"><span>Back: skip for now</span><span>OK: next person · Or just say "Ayse loved it"</span></div>
+</body>
+</html>

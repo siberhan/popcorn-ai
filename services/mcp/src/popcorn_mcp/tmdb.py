@@ -13,7 +13,10 @@ import httpx
 from .store import Store
 
 DAY = 24 * 3600
-IMAGE_BASE = "https://image.tmdb.org/t/p/w342"
+IMAGE_ROOT = "https://image.tmdb.org/t/p/"
+IMAGE_BASE = IMAGE_ROOT + "w342"
+# TMDB watch provider lists -> our kinds, best first. free/ads are streams too.
+PROVIDER_KINDS = [("flatrate", "stream"), ("free", "stream"), ("ads", "stream"), ("rent", "rent"), ("buy", "buy")]
 CERT_ORDER = ["G", "PG", "PG-13", "R", "NC-17"]
 
 log = logging.getLogger(__name__)
@@ -65,11 +68,25 @@ class TMDB:
         max_certification: str | None = None,
         min_votes: int = 300,
         page: int = 1,
+        sort_by: str = "popularity.desc",
+        with_keywords: str | None = None,
+        without_keywords: str | None = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
+        watch_region: str | None = None,
+        monetization: str | None = None,
     ) -> list[dict]:
+        """One page of /discover/movie. `monetization` (e.g. "flatrate") needs `watch_region`."""
         params = {
             "with_genres": with_genres,
             "without_genres": without_genres,
-            "sort_by": "popularity.desc",
+            "with_keywords": with_keywords,
+            "without_keywords": without_keywords,
+            "primary_release_date.gte": f"{year_from}-01-01" if year_from else None,
+            "primary_release_date.lte": f"{year_to}-12-31" if year_to else None,
+            "watch_region": watch_region,
+            "with_watch_monetization_types": monetization,
+            "sort_by": sort_by,
             "vote_count.gte": min_votes,
             "include_adult": "false",
             "language": "en-US",
@@ -81,6 +98,12 @@ class TMDB:
         data = await self._get("/discover/movie", params)
         return [m for m in data["results"] if not m.get("adult")]
 
+    async def keyword_id(self, word: str) -> int | None:
+        """First TMDB keyword matching a plain word, e.g. "superhero" -> 9715."""
+        data = await self._get("/search/keyword", {"query": " ".join(word.split())}, fresh_for=7 * DAY)
+        results = data.get("results") or []
+        return results[0]["id"] if results else None
+
     async def search(self, title: str) -> list[dict]:
         data = await self._get("/search/movie", {"query": title, "include_adult": "false", "language": "en-US"})
         return [m for m in data["results"] if not m.get("adult")]
@@ -89,6 +112,15 @@ class TMDB:
         return await self._get(
             f"/movie/{movie_id}", {"language": "en-US", "append_to_response": "release_dates,credits"}, fresh_for=7 * DAY
         )
+
+    async def certification(self, movie_id: int) -> str | None:
+        """US certification only: a small response, for checking many films at once."""
+        data = await self._get(f"/movie/{movie_id}/release_dates", fresh_for=7 * DAY)
+        return us_certification({"release_dates": data})
+
+    async def watch_providers(self, movie_id: int) -> dict:
+        """Where to watch, per region: {"id", "results": {"US": {"link", "flatrate"|"rent"|"buy": [...]}}}."""
+        return await self._get(f"/movie/{movie_id}/watch/providers", fresh_for=DAY)
 
 
 def us_certification(details: dict) -> str | None:
@@ -110,3 +142,25 @@ def cert_allowed(cert: str | None, max_cert: str | None) -> bool:
 
 def poster_url(path: str | None) -> str | None:
     return IMAGE_BASE + path if path else None
+
+
+def backdrop_url(path: str | None) -> str | None:
+    return IMAGE_ROOT + "w1280" + path if path else None
+
+
+def logo_url(path: str | None) -> str | None:
+    return IMAGE_ROOT + "w92" + path if path else None
+
+
+def providers_for(data: dict, region: str, limit: int = 4) -> tuple[list[dict], str | None]:
+    """One entry per provider for a region, streams before rentals before purchases, in TMDB's order."""
+    country = (data.get("results") or {}).get(region) or {}
+    seen, providers = set(), []
+    for key, kind in PROVIDER_KINDS:
+        for item in country.get(key) or []:
+            if item.get("provider_id") in seen or not item.get("provider_name"):
+                continue
+            seen.add(item["provider_id"])
+            providers.append({"id": item["provider_id"], "name": item["provider_name"],
+                              "logo": logo_url(item.get("logo_path")), "kind": kind})
+    return providers[:limit], country.get("link")

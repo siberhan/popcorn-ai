@@ -108,3 +108,79 @@ Severity: Critical (blocked) / High (big detour) / Medium (slowed down) / Low (a
 - **Severity:** Low
 - **Workaround:** Capture the emulator's macOS window instead: find the window id of the `vega-virtual-device` process with `CGWindowListCopyWindowInfo`, then `screencapture -x -o -l <window id> out.png`.
 - **Suggestion:** Add `vega device screenshot [--output file.png]` (like `adb exec-out screencap -p`), or let `screenshooter` work for the developer shell user.
+
+## 7. Amazon buildertools MCP rejects every tool call until `set_project_context` is called
+
+- **Tool / SDK / version:** `@amazon-devices/amazon-devices-buildertools-mcp` v1.0.17 (via `npx -y ...@latest`; the install printed several npm deprecation warnings), used from a coding agent
+- **Task attempted:** Search the Vega docs for how `TextInput` and the on-screen keyboard work with D-pad focus.
+- **Steps taken:**
+  1. Started the MCP server with `npx -y @amazon-devices/amazon-devices-buildertools-mcp@latest`.
+  2. Called the documentation search tool.
+- **Expected:** Search results.
+- **Actual:** Every tool call returned
+  `{"error":"PROJECT_CONTEXT_REQUIRED","message":"You must call set_project_context before using any other tool..."}`
+  even for a plain doc search that does not need a project.
+- **Severity:** Low
+- **Workaround:** Call `set_project_context({config:{}})` once first; after that the search works.
+- **Suggestion:** Let doc search work without a project context, or set an empty context by default. Mention the required first call in the tool descriptions so an agent sees it before the first failure.
+
+## 8. Vega docs say nothing about `TextInput` together with D-pad focus libraries
+
+- **Tool / SDK / version:** Vega developer docs (searched through buildertools MCP v1.0.17), Vega SDK 0.24.12112, `react-tv-space-navigation`, Vega Virtual Device (aarch64)
+- **Task attempted:** A remote-only "add family member" form on the TV: name and age fields inside a `react-tv-space-navigation` focus tree.
+- **Steps taken:** Searched the docs for how a focusable wrapper should hand focus to a `TextInput`, and whether TVEventHandler / spatial navigation keeps getting D-pad events while the on-screen keyboard is open.
+- **Expected:** Guidance on TextInput focus and the keyboard on TV, for apps that use a spatial navigation library.
+- **Actual:** The docs cover `TextInput`, `Keyboard` events and `underlineColorKepler`, but nothing about D-pad focus or spatial navigation while the keyboard is open. We had to find out on the simulator: `.focus()` opens a full-screen keyboard (a number pad for `keyboardType="number-pad"`), the arrows move inside the keyboard, and "Done" fires `onSubmitEditing`.
+- **Severity:** Low
+- **Workaround:** Lock spatial navigation while a field is being edited and unlock it on submit, blur, `keyboardDidHide` or unmount. This worked on the VVD.
+- **Suggestion:** Add a short "Text input with the remote" page: how focus moves from a focusable view to `TextInput`, what the keyboard does with D-pad keys, and which events fire on Done and Back.
+
+## 9. boto3 `update_function_code` with a 26 MB zip fails with "The write operation timed out"; raising `read_timeout` does not help
+
+- **Tool / SDK / version:** boto3 / botocore 1.43.114, urllib3 2.8.0, Python 3.14, Lambda `UpdateFunctionCode` with `ZipFile=` in eu-north-1
+- **Task attempted:** Redeploy the MCP server (26.4 MB zip) and the agent (31.1 MB zip) from a home connection with a slow uplink.
+- **Steps taken:**
+  1. `lam.update_function_code(FunctionName=..., ZipFile=code)` with a default client: fails.
+  2. Retried: same failure.
+  3. Client with `Config(connect_timeout=30, read_timeout=600)`: same failure.
+  4. Client with `Config(connect_timeout=600, read_timeout=600)`: works (both uploads took about 8 minutes).
+- **Expected:** A large upload either works or fails with a hint about which timeout to raise; `read_timeout` sounds like the knob for a slow request.
+- **Actual:** `TimeoutError: The write operation timed out` -> `urllib3.exceptions.ProtocolError: ('Connection aborted.', ...)` -> `botocore.exceptions.ConnectionClosedError: Connection was closed before we received a valid response from endpoint URL: "https://lambda.eu-north-1.amazonaws.com/2015-03-31/functions/popcorn-mcp/code"`. The socket write during the body upload is bounded by `connect_timeout` (60 s default), which the error text does not say.
+- **Severity:** Medium (blocked deploys until found)
+- **Workaround:** `Config(connect_timeout=600, read_timeout=600)` on the Lambda client (`infra/deploy.py`).
+- **Suggestion:** Document which timeout bounds request-body writes, or add a `write_timeout`; mention it in the `ConnectionClosedError` text. The Lambda docs for `ZipFile` uploads could also point slow connections to the S3 upload path.
+
+## 10. Vega: no documented way to open Prime Video (or any other streaming app) on a title
+
+- **Tool / SDK / version:** Vega developer docs 0.24 (deep links, Content Launcher, Linking), Vega SDK 0.24.12112
+- **Task attempted:** "Where to watch" on the film details screen: the family picks Prime Video and the TV opens that film in Prime Video.
+- **Steps taken:** Read the deep link page (`Linking.openURL` with a URI the target app declares in a `[[message]]` block) and the Content Launcher guide; searched for Prime Video URI schemes or ASIN links.
+- **Expected:** A documented way to launch Amazon's own Prime Video app on a title (ASIN or search), at least for Amazon first-party apps.
+- **Actual:** Content Launcher only covers the system launching *our* app. Deep links need the target app's own URI contract, and no Prime Video (or Netflix) URI is documented anywhere we could find.
+- **Severity:** Medium (the "where to watch" handoff cannot actually hand off on the device)
+- **Workaround:** The TV shows a handoff panel ("Enjoy it on Prime Video, come back when it's over") with a "We're back" button that starts the family rating.
+- **Suggestion:** Publish a launch intent for first-party apps (Prime Video by ASIN, Prime Video search) in the Vega deep link docs.
+
+## 11. Strands Agents logs a warning on every multi-tool turn with the OpenAI-compatible model
+
+- **Tool / SDK / version:** Strands Agents 1.61.1, `strands.models.openai.OpenAIModel` pointed at OpenRouter
+- **Task attempted:** Multi-turn voice conversations that call several MCP tools per turn.
+- **Actual:** Every turn logs `reasoningContent is not supported in multi-turn conversations with the Chat Completions API.` (strands/models/openai.py:409) and drops the reasoning content.
+- **Expected:** Reasoning content kept, or dropped once without a warning per message.
+- **Severity:** Low (works; noisy CloudWatch logs)
+- **Workaround:** None needed.
+- **Suggestion:** Log it once per agent, or make it a debug message.
+
+## 12. Vega app crashes at start with "Unknown URL scheme" when a shared package `require`s an image
+
+- **Tool / SDK / version:** Vega SDK 0.24.12112, `@amazon-devices/react-native-kepler` 2.0 (RN 0.72), Metro with `watchFolders` (yarn monorepo from `AmazonAppDev/react-native-multi-tv-app-sample`), Vega Virtual Device (aarch64)
+- **Task attempted:** Show a background image (`require('../../assets/images/backdrop-blob.png')`) from the shared UI package that both the web and the Vega app use.
+- **Steps taken:**
+  1. `yarn build:vega`, `vega device install-app`, `vega device launch-app`: the app closed at once, no JS log lines at all.
+  2. `vega device start-log-stream` only showed `Process 'com.popcornai.tv' (PID=...) crashed with signal 6` on `JSThread`.
+  3. `vega device get-log-info`, then `vega device copy-logs -a SYSTEM_TOMBSTONE/acr --dir ...`: the `.acr` file had the real error.
+- **Expected:** The image loads, as it does on web, or a build-time error.
+- **Actual:** `Error: Exception in HostFunction: Unknown URL scheme` at `updateHostContainer` (ReactFabric-prod.js). The bundle registers the asset with `httpServerLocation: "/assets/../../packages/shared-ui/src/assets/images"` (it lives outside the app folder) and the package stores it under `bundle/assets/__packages/...`, which the runtime cannot load.
+- **Severity:** High (the app does not start; the error is only in the tombstone, not in the log stream)
+- **Workaround:** A `backdropBlob.vega.ts` platform file that `require`s a copy of the image inside `apps/vega/src/assets`.
+- **Suggestion:** Support assets from Metro `watchFolders` (the multi-TV sample is a monorepo, so this will hit others), or fail the build with a clear message. Print uncaught JS errors in `start-log-stream`, not only in the ACR.

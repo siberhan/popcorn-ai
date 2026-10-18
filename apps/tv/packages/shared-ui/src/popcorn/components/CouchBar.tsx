@@ -23,6 +23,7 @@ const SCREEN_LABELS: Record<Screen, string> = {
   duel: 'POSTER DUEL',
   recommendations: "TONIGHT'S PICKS",
   details: 'MOVIE DETAILS',
+  rating: 'HOW WAS IT',
 };
 
 /**

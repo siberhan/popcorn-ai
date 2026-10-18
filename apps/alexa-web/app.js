@@ -10,6 +10,11 @@ import {
   MOCK_MODE,
   INITIAL_ORB_STATE,
   TV_POLL_INTERVAL_MS,
+  TV_POLL_FAST_MS,
+  MCP_BASE_URL,
+  RATING_SILENCE_MS,
+  RATING_LIVE_THROTTLE_MS,
+  NARRATION_MAX_PARALLEL,
   STORAGE_KEY_SPEAKER,
   TOOL_LABELS,
   formatToolInput,
@@ -67,6 +72,7 @@ let activeStreamAbort = null;
 let activeAudio = null;
 let activeAudioUrl = null;
 let speechSynthTimer = null;
+let speakDoneResolve = null; // resolves the promise returned by speakReply
 
 let recognition = null;
 let isListening = false;
@@ -200,18 +206,34 @@ export function stopSpeaking() {
   if (orbState === "speaking") {
     setOrbState("idle");
   }
+  if (speakDoneResolve) {
+    const resolve = speakDoneResolve;
+    speakDoneResolve = null;
+    resolve();
+    setTimeout(onVoiceIdle, 0);
+  }
 }
 
-async function speakReply(text) {
+/** Speak `text`; the returned promise resolves when playback ends or is stopped. */
+function speakReply(text) {
   const clean = (text || "").trim().slice(0, 1500);
   if (!clean) {
     setOrbState("idle");
-    return;
+    setTimeout(onVoiceIdle, 0);
+    return Promise.resolve();
   }
 
   stopSpeaking();
+  stopNarration();
   setOrbState("speaking");
+  const done = new Promise((resolve) => {
+    speakDoneResolve = resolve;
+  });
+  speakReplyAudio(clean);
+  return done;
+}
 
+async function speakReplyAudio(clean) {
   if (MOCK_MODE) {
     speakWithBrowserSynthesis(clean);
     return;
@@ -232,12 +254,13 @@ async function speakReply(text) {
       } catch {
         /* ignore */
       }
+      stopSpeaking();
       showError(errMsg);
       return;
     }
 
     const blob = await response.blob();
-    if (orbState !== "speaking") return; // Stopped while fetching
+    if (orbState !== "speaking" || !speakDoneResolve) return; // Stopped while fetching
 
     activeAudioUrl = URL.createObjectURL(blob);
     const audio = new Audio(activeAudioUrl);
@@ -270,13 +293,11 @@ function speakWithBrowserSynthesis(text) {
       utterance.rate = 1.02;
       utterance.onend = () => {
         if (performance.now() - startedAt < 500) return;
-        if (speechSynthTimer) clearTimeout(speechSynthTimer);
-        if (orbState === "speaking") setOrbState("idle");
+        if (orbState === "speaking") stopSpeaking();
       };
       utterance.onerror = () => {
         if (performance.now() - startedAt < 500) return;
-        if (speechSynthTimer) clearTimeout(speechSynthTimer);
-        if (orbState === "speaking") setOrbState("idle");
+        if (orbState === "speaking") stopSpeaking();
       };
       window.speechSynthesis.speak(utterance);
     } catch {
@@ -317,7 +338,7 @@ function setupSpeechRecognition() {
     clearError();
     setOrbState("listening");
     liveTranscriptBar.dataset.active = "true";
-    transcriptLabel.textContent = "Listening";
+    transcriptLabel.textContent = ratingListen ? `Listening for ${ratingListen.name}` : "Listening";
     liveTranscriptText.textContent = "Speak now...";
     startMicVolumeMeter();
   };
@@ -341,7 +362,13 @@ function setupSpeechRecognition() {
     if (combined) {
       const stripped = stripWakeWord(combined);
       const hadWakeWord = stripped.length < combined.length;
-      transcriptLabel.textContent = hadWakeWord ? "Wake word stripped" : "Live mic";
+      if (ratingListen) {
+        transcriptLabel.textContent = `${ratingListen.name} says`;
+        armRatingSilenceTimer();
+        postRatingLive(stripped || combined);
+      } else {
+        transcriptLabel.textContent = hadWakeWord ? "Wake word stripped" : "Live mic";
+      }
       liveTranscriptText.textContent = stripped || combined;
     }
   };
@@ -352,6 +379,7 @@ function setupSpeechRecognition() {
     liveTranscriptBar.dataset.active = "false";
 
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      if (ratingListen) endRatingListen("mic blocked");
       speechNote.hidden = false;
       speechNote.textContent =
         "Microphone access was blocked or unavailable. You can type commands below or enable mic permissions.";
@@ -362,6 +390,7 @@ function setupSpeechRecognition() {
       setOrbState("idle");
       return;
     }
+    if (ratingListen) endRatingListen(`mic error ${event.error}`);
     showError(`Microphone error: ${event.error}`);
   };
 
@@ -373,6 +402,10 @@ function setupSpeechRecognition() {
     const rawCaptured = `${finalTranscriptBuffer} ${interimTranscript}`.trim();
     interimTranscript = "";
     finalTranscriptBuffer = "";
+
+    if (ratingListen && handleRatingRecognitionEnd(rawCaptured)) {
+      return;
+    }
 
     if (rawCaptured) {
       handleUserUtterance(rawCaptured);
@@ -437,6 +470,7 @@ function stopMicVolumeMeter() {
 
 function startListening() {
   stopSpeaking();
+  stopNarration();
   clearError();
 
   if (!recognition) {
@@ -641,7 +675,7 @@ function updateAgentStepSummary() {
    Utterance Dispatch & SSE Stream Consumer
    ========================================================================== */
 
-export async function handleUserUtterance(rawText) {
+export async function handleUserUtterance(rawText, opts = {}) {
   if (!rawText || !rawText.trim()) return;
 
   stopSpeaking();
@@ -659,7 +693,7 @@ export async function handleUserUtterance(rawText) {
   transcriptLabel.textContent = hadWake ? "Sent (wake word stripped)" : "Sent";
   liveTranscriptText.textContent = cleanedText;
 
-  const speaker = getCurrentSpeaker();
+  const speaker = opts.speaker || getCurrentSpeaker();
   appendUserBubble(cleanedText, speaker, rawText);
   resetToolStepsForTurn();
   setOrbState("thinking");
@@ -1025,6 +1059,7 @@ export function renderTvState(state) {
     r: (state.recommendations || []).map((x) => x.id),
     d: state.duel,
     dt: state.details && state.details.id,
+    rt: state.rating,
   });
   if (serialized === lastTvStateKey) return;
   lastTvStateKey = serialized;
@@ -1072,6 +1107,11 @@ export function renderTvState(state) {
 
   // Render TV Screen Viewport
   tvScreenViewport.innerHTML = "";
+
+  if (state.screen === "rating" && state.rating) {
+    renderRatingPreview(state.rating);
+    return;
+  }
 
   if (state.screen === "duel" && state.duel && Array.isArray(state.duel.pair) && state.duel.pair.length >= 2) {
     const header = document.createElement("div");
@@ -1185,6 +1225,68 @@ export function renderTvState(state) {
   tvScreenViewport.appendChild(placeholder);
 }
 
+const REACTION_LABELS = {
+  loved: "Loved it",
+  liked: "Liked it",
+  meh: "Meh",
+  disliked: "Didn't like it",
+  hated: "Hated it",
+};
+
+/** Rating screen preview: the film, whose turn it is, and every answer so far. */
+function renderRatingPreview(rating) {
+  const movie = rating.movie || {};
+  const card = document.createElement("div");
+  card.className = "tv-movie-card";
+  card.appendChild(createPosterElement(movie.poster, movie.title));
+
+  const info = document.createElement("div");
+  info.className = "tv-movie-info";
+  const status = rating.done
+    ? "Saved, thanks everyone"
+    : rating.asking
+      ? `${rating.asking}'s turn`
+      : "Waiting";
+  info.innerHTML = `
+    <div class="tv-movie-top">
+      <span class="tv-movie-title">${escapeHtml(movie.title || "Movie")}<span class="tv-movie-year">${escapeHtml(movie.year || "")}</span></span>
+      <span class="tv-match-pill">${escapeHtml(status)}</span>
+    </div>
+  `;
+
+  const list = document.createElement("ul");
+  list.className = "tv-rating-list";
+  const answers = rating.answers || {};
+  (rating.people || []).forEach((name) => {
+    const li = document.createElement("li");
+    li.className = "tv-rating-row";
+    const answer = answers[name];
+    let text;
+    if (answer) {
+      li.dataset.status = answer.skipped ? "skipped" : "answered";
+      text = answer.skipped ? "Skipped" : REACTION_LABELS[answer.reaction] || answer.reaction || "Answered";
+      if (answer.quote) text += ` · "${answer.quote}"`;
+      else if (answer.by === "hand") text += " · by hand";
+    } else if (name === rating.asking && !rating.done) {
+      li.dataset.status = "asking";
+      text = rating.live ? `Hearing: "${rating.live}"` : "Asking now";
+    } else {
+      li.dataset.status = "waiting";
+      text = "Waiting";
+    }
+    const who = document.createElement("strong");
+    who.textContent = name;
+    const what = document.createElement("span");
+    what.textContent = ` ${text}`;
+    li.appendChild(who);
+    li.appendChild(what);
+    list.appendChild(li);
+  });
+  info.appendChild(list);
+  card.appendChild(info);
+  tvScreenViewport.appendChild(card);
+}
+
 function createPosterElement(posterUrl, title) {
   const wrap = document.createElement("div");
   wrap.className = "tv-poster-wrap";
@@ -1215,15 +1317,33 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+let lastTvVersion = -1;
+let lastTvScreen = "couch";
+
 async function pollTvStateOnce() {
   try {
-    const res = await fetch(TV_STATE_URL, { method: "GET" });
+    const res = await fetch(TV_STATE_URL, { method: "GET", cache: "no-store" });
     if (!res.ok) return;
     const data = await res.json();
+    if (!data || typeof data !== "object") return;
+    // Overlapping polls (loop + after tool_end) can arrive out of order; keep the newest.
+    if (typeof data.version === "number") {
+      if (data.version < lastTvVersion) return;
+      lastTvVersion = data.version;
+    }
+    lastTvScreen = data.screen || "couch";
     renderTvState(data);
+    onTvState(data);
   } catch {
     /* silent when MCP TV endpoint is unreachable */
   }
+}
+
+/** Always-on polling: 1 s on rating/recommendations, 1.5 s elsewhere. */
+async function tvPollLoop() {
+  await pollTvStateOnce();
+  const fast = lastTvScreen === "rating" || lastTvScreen === "recommendations";
+  setTimeout(tvPollLoop, fast ? TV_POLL_FAST_MS : TV_POLL_INTERVAL_MS);
 }
 
 function startTvPolling() {
@@ -1237,8 +1357,378 @@ function startTvPolling() {
     });
     return;
   }
-  pollTvStateOnce();
-  setInterval(pollTvStateOnce, TV_POLL_INTERVAL_MS);
+  tvPollLoop();
+}
+
+/* ==========================================================================
+   Voice Driver: "why" narration on the reel + spoken rating questions
+   ========================================================================== */
+
+function vlog(...args) {
+  console.log("[voice]", ...args);
+}
+
+let voiceBaselineTaken = false;
+
+/** React to a fresh TV state (live polling only). */
+function onTvState(state) {
+  syncNarrationClips(state.recommendations);
+
+  const focus = state.focus && typeof state.focus.movie_id === "number" ? state.focus : null;
+  const focusKey = focus ? `${focus.movie_id}:${focus.at}` : "";
+
+  const rating = state.screen === "rating" && state.rating ? state.rating : null;
+  const ratingKey = rating && !rating.done && rating.asking ? `${rating.movie && rating.movie.id}:${rating.asking}` : "";
+
+  if (!voiceBaselineTaken) {
+    // Do not react to what was already on the TV when the page loaded.
+    voiceBaselineTaken = true;
+    lastFocusKey = focusKey;
+    lastRatingKey = ratingKey;
+    return;
+  }
+
+  if (focusKey !== lastFocusKey) {
+    lastFocusKey = focusKey;
+    if (focus && state.screen === "recommendations") {
+      playFocusClip(focus.movie_id);
+    } else {
+      stopNarration();
+    }
+  }
+  if (state.screen !== "recommendations") {
+    stopNarration();
+  }
+
+  if (ratingKey !== lastRatingKey) {
+    lastRatingKey = ratingKey;
+    onRatingAskingChanged(rating);
+  }
+  maybeAskPending();
+}
+
+/* ---------- Why narration ---------- */
+
+const narrationClips = new Map(); // movie id -> { text, url | null, pending }
+let narrationQueue = [];
+let narrationActive = 0;
+let narrationGen = 0;
+let narrationAudio = null;
+let narrationWantId = null; // focused film whose clip is not ready yet
+let lastFocusKey = "";
+let lastRecsKey = "";
+
+function whySentence(why) {
+  const parts = String(why || "")
+    .split(" · ")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return "";
+  let sentence = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+  sentence = sentence.charAt(0).toUpperCase() + sentence.slice(1);
+  return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
+}
+
+function narrationText(movie) {
+  const why = whySentence(movie.why);
+  return `${movie.title}.${why ? ` ${why}` : ""}`.slice(0, 1500);
+}
+
+function syncNarrationClips(recs) {
+  const list = Array.isArray(recs) ? recs.filter((m) => m && typeof m.id === "number" && m.title) : [];
+  const key = JSON.stringify(list.map((m) => [m.id, m.title, m.why || ""]));
+  if (key === lastRecsKey) return;
+  lastRecsKey = key;
+
+  narrationGen += 1;
+  narrationQueue = [];
+  const keep = new Map(list.map((m) => [m.id, narrationText(m)]));
+  for (const [id, clip] of narrationClips) {
+    if (keep.get(id) !== clip.text) {
+      if (clip.url) URL.revokeObjectURL(clip.url);
+      narrationClips.delete(id);
+    }
+  }
+  if (MOCK_MODE) return;
+  for (const [id, text] of keep) {
+    if (!narrationClips.has(id)) {
+      narrationClips.set(id, { text, url: null, pending: true });
+      narrationQueue.push(id);
+    }
+  }
+  vlog(`recommendations changed: ${list.length} films, ${narrationQueue.length} clips to generate`);
+  pumpNarrationQueue();
+}
+
+function pumpNarrationQueue() {
+  while (narrationActive < NARRATION_MAX_PARALLEL && narrationQueue.length > 0) {
+    const id = narrationQueue.shift();
+    narrationActive += 1;
+    generateNarrationClip(id, narrationGen).finally(() => {
+      narrationActive -= 1;
+      pumpNarrationQueue();
+    });
+  }
+}
+
+async function generateNarrationClip(id, gen) {
+  const clip = narrationClips.get(id);
+  if (!clip) return;
+  const started = performance.now();
+  vlog(`clip start  ${id} (in flight ${narrationActive})`);
+  try {
+    const res = await fetch(`${AGENT_URL}/speak`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: clip.text }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const current = narrationClips.get(id);
+    if (gen !== narrationGen && current !== clip) return; // replaced meanwhile
+    if (current !== clip) return;
+    clip.url = URL.createObjectURL(blob);
+    clip.pending = false;
+    vlog(`clip ready  ${id} in ${Math.round(performance.now() - started)} ms: "${clip.text}"`);
+    if (narrationWantId === id) {
+      narrationWantId = null;
+      playFocusClip(id);
+    }
+  } catch (err) {
+    clip.pending = false;
+    vlog(`clip failed ${id}: ${err && err.message}`);
+  }
+}
+
+function replyIsBusy() {
+  return isListening || orbState === "listening" || orbState === "speaking" || orbState === "thinking" || Boolean(ratingListen);
+}
+
+function playFocusClip(id) {
+  stopNarration();
+  if (replyIsBusy()) {
+    vlog(`focus ${id}: skipped (mic open or reply playing)`);
+    return;
+  }
+  const clip = narrationClips.get(id);
+  if (!clip) {
+    vlog(`focus ${id}: no clip for this film`);
+    return;
+  }
+  if (!clip.url) {
+    vlog(`focus ${id}: clip not ready, will play when it is`);
+    narrationWantId = id;
+    return;
+  }
+  const audio = new Audio(clip.url);
+  narrationAudio = audio;
+  audio.addEventListener("ended", () => {
+    if (narrationAudio === audio) narrationAudio = null;
+  });
+  vlog(`focus ${id}: playing clip "${clip.text}"`);
+  audio.play().catch((err) => {
+    vlog(`focus ${id}: play() refused (${err && err.name}); click the page once to allow audio`);
+    if (narrationAudio === audio) narrationAudio = null;
+  });
+}
+
+function stopNarration() {
+  narrationWantId = null;
+  if (narrationAudio) {
+    try {
+      narrationAudio.pause();
+    } catch {
+      /* ignore */
+    }
+    narrationAudio = null;
+  }
+}
+
+/* ---------- Rating questions ---------- */
+
+let lastRatingKey = "";
+let pendingQuestion = null; // { name, text, key }
+let ratingListen = null; // { name, key, silenceTimer, cancelled, reason }
+let liveTimer = null;
+let liveLastAt = 0;
+let liveLastSent = "";
+let livePending = null;
+let liveCount = 0;
+
+function onRatingAskingChanged(rating) {
+  pendingQuestion = null;
+  if (ratingListen) {
+    vlog(`asking changed while listening to ${ratingListen.name}: stop listening`);
+    cancelRatingListen("asking changed");
+  }
+  if (!rating || rating.done || !rating.asking) {
+    if (orbState === "speaking" && currentQuestionKey) stopSpeaking();
+    return;
+  }
+  const name = rating.asking;
+  const first = Object.keys(rating.answers || {}).length === 0;
+  const title = (rating.movie && rating.movie.title) || "the movie";
+  const text = first ? `${name}, what did you think of ${title}?` : `${name}, your turn.`;
+  pendingQuestion = { name, text, key: lastRatingKey };
+  vlog(`asking -> ${name}: queued question "${text}"`);
+  // A question being spoken for someone else is out of date now.
+  if (orbState === "speaking" && currentQuestionKey) stopSpeaking();
+}
+
+let currentQuestionKey = null;
+
+/** Ask the queued question once nobody is talking and no agent turn is running. */
+function maybeAskPending() {
+  if (!pendingQuestion) return;
+  if (isListening || orbState === "listening" || orbState === "speaking" || orbState === "thinking") return;
+  const q = pendingQuestion;
+  pendingQuestion = null;
+  askQuestion(q);
+}
+
+function onVoiceIdle() {
+  maybeAskPending();
+}
+
+async function askQuestion(q) {
+  speakerInput.value = q.name;
+  updateSpeakerBadge();
+  currentQuestionKey = q.key;
+  vlog(`question spoken: "${q.text}"`);
+  await speakReply(q.text);
+  currentQuestionKey = null;
+  if (q.key !== lastRatingKey) {
+    vlog(`question for ${q.name} interrupted, not opening mic`);
+    return;
+  }
+  openRatingMic(q.name, q.key);
+}
+
+function openRatingMic(name, key) {
+  ratingListen = { name, key, silenceTimer: null, cancelled: false, reason: "" };
+  liveLastSent = "";
+  liveCount = 0;
+  vlog(`mic open for ${name} (no wake word, ${RATING_SILENCE_MS / 1000} s silence limit)`);
+  armRatingSilenceTimer();
+  if (!recognition) {
+    setOrbState("listening");
+    liveTranscriptBar.dataset.active = "true";
+    transcriptLabel.textContent = `Listening for ${name}`;
+    liveTranscriptText.textContent = "No Web Speech API here; type the answer below.";
+    return;
+  }
+  try {
+    recognition.start();
+  } catch {
+    /* already started */
+  }
+}
+
+function armRatingSilenceTimer() {
+  if (!ratingListen) return;
+  if (ratingListen.silenceTimer) clearTimeout(ratingListen.silenceTimer);
+  ratingListen.silenceTimer = setTimeout(() => {
+    vlog(`no speech from ${ratingListen && ratingListen.name} for ${RATING_SILENCE_MS / 1000} s: closing mic`);
+    cancelRatingListen("silence");
+  }, RATING_SILENCE_MS);
+}
+
+/** Stop listening without sending anything (silence timeout, Skip or hand rating on the TV). */
+function cancelRatingListen(reason) {
+  if (!ratingListen) return;
+  ratingListen.cancelled = true;
+  ratingListen.reason = reason;
+  if (recognition && isListening) {
+    try {
+      recognition.abort();
+    } catch {
+      /* ignore */
+    }
+  } else {
+    endRatingListen(reason);
+    if (orbState === "listening") setOrbState("idle");
+  }
+}
+
+function endRatingListen(reason) {
+  if (!ratingListen) return;
+  if (ratingListen.silenceTimer) clearTimeout(ratingListen.silenceTimer);
+  vlog(`mic closed for ${ratingListen.name} (${reason}), ${liveCount} live posts`);
+  ratingListen = null;
+  if (liveTimer) clearTimeout(liveTimer);
+  liveTimer = null;
+  livePending = null;
+  liveTranscriptBar.dataset.active = "false";
+  if (reason === "silence") {
+    transcriptLabel.textContent = "Live mic";
+    liveTranscriptText.textContent = "No answer heard. Rate by hand or skip on the TV.";
+  }
+  setTimeout(onVoiceIdle, 0);
+}
+
+/** Called from recognition.onend while a rating mic is open. Returns true when handled. */
+function handleRatingRecognitionEnd(rawCaptured) {
+  const rl = ratingListen;
+  if (rl.cancelled) {
+    endRatingListen(rl.reason);
+    if (orbState === "listening") setOrbState("idle");
+    return true;
+  }
+  if (rawCaptured) {
+    const text = stripWakeWord(rawCaptured) || rawCaptured;
+    flushRatingLive(text);
+    endRatingListen("final result");
+    vlog(`final for ${rl.name}: "${text}" -> /chat/stream`);
+    handleUserUtterance(text, { speaker: rl.name });
+    return true;
+  }
+  // Recognition ended on its own before the 8 s limit (browser no-speech): keep listening.
+  if (rl.key === lastRatingKey) {
+    try {
+      recognition.start();
+      return true;
+    } catch {
+      /* fall through */
+    }
+  }
+  endRatingListen("ended");
+  if (orbState === "listening") setOrbState("idle");
+  return true;
+}
+
+/** Throttled POST /api/rating/live: at most one request per RATING_LIVE_THROTTLE_MS, latest text wins. */
+function postRatingLive(text) {
+  livePending = text;
+  if (liveTimer) return;
+  const wait = Math.max(0, liveLastAt + RATING_LIVE_THROTTLE_MS - Date.now());
+  liveTimer = setTimeout(() => {
+    liveTimer = null;
+    if (livePending !== null) sendRatingLive(livePending);
+    livePending = null;
+  }, wait);
+}
+
+function flushRatingLive(text) {
+  if (liveTimer) clearTimeout(liveTimer);
+  liveTimer = null;
+  livePending = null;
+  if (Date.now() - liveLastAt >= RATING_LIVE_THROTTLE_MS) sendRatingLive(text);
+}
+
+function sendRatingLive(text) {
+  if (text === liveLastSent) return;
+  liveLastSent = text;
+  liveLastAt = Date.now();
+  liveCount += 1;
+  vlog(`live post #${liveCount} at ${liveLastAt % 100000} ms: "${text}"`);
+  if (MOCK_MODE) return;
+  fetch(`${MCP_BASE_URL}/api/rating/live`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  }).catch(() => {
+    /* the TV just misses a live caption */
+  });
 }
 
 /* ==========================================================================
@@ -1380,4 +1870,5 @@ window.__popcornApp = {
   handleUserUtterance,
   renderTvState,
   stopSpeaking,
+  onTvState,
 };

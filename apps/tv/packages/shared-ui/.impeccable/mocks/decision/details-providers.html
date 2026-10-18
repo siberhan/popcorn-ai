@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Platforms first · film details</title>
+<style>
+  :root { --ground:#0B0D12; --white:#FFFFFF; --mute:#B4BCCB; --dim:#8F98AB; --field:#1C2230; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--ground); color:var(--white);
+    font-family:-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif; }
+  .field { position:absolute; inset:-200px; filter:blur(160px); }
+  .blob { position:absolute; border-radius:50%; }
+  .blob.one { width:1100px; height:600px; left:600px; top:380px; background:#96582E; opacity:0.38; }
+  .blob.two { width:700px; height:500px; left:1300px; top:120px; background:#2C5C78; opacity:0.4; }
+  header { position:absolute; left:96px; right:96px; top:54px; display:flex; justify-content:space-between; align-items:center; font-size:28px; font-weight:500; }
+  .couch { display:flex; align-items:center; gap:14px; color:var(--mute); font-size:24px; }
+  .couch i { width:40px; height:40px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-size:18px; font-weight:600; color:var(--white); }
+  .film { position:absolute; left:96px; top:150px; display:flex; gap:40px; align-items:center; }
+  /* Poster stand-in; the app shows the TMDB poster. */
+  .poster { width:180px; height:270px; border-radius:12px; background:linear-gradient(160deg, #1E4E5C 0%, #C46A2A 60%, #2A1A12 100%); }
+  h1 { font-size:56px; font-weight:600; letter-spacing:-0.02em; }
+  .meta { margin-top:12px; font-size:26px; color:var(--mute); }
+  .fit { margin-top:16px; font-size:26px; font-weight:500; }
+  .fit b { display:inline-block; height:44px; line-height:44px; padding:0 18px; border-radius:22px; background:var(--white); color:var(--ground); font-size:22px; font-weight:600; margin-right:14px; }
+  h2 { position:absolute; left:96px; top:500px; font-size:32px; font-weight:600; }
+  .tiles { position:absolute; left:96px; right:96px; top:566px; display:flex; gap:32px; }
+  .tile { flex:1; height:240px; border-radius:20px; background:var(--field); padding:30px 34px; display:flex; flex-direction:column; justify-content:space-between; }
+  .tile .k { font-size:22px; color:var(--mute); font-weight:500; }
+  .tile b { font-size:44px; font-weight:600; letter-spacing:-0.01em; }
+  .tile .p { font-size:24px; color:var(--mute); }
+  .tile.on { background:var(--white); color:var(--ground); transform:scale(1.04); box-shadow:0 30px 60px rgba(0,0,0,0.5); }
+  .tile.on .k, .tile.on .p { color:#3A4150; }
+  .about { position:absolute; left:96px; right:96px; top:880px; font-size:24px; line-height:1.45; color:var(--mute); max-width:1500px; }
+  .about b { color:var(--white); font-weight:600; }
+  .foot { position:absolute; left:96px; right:96px; bottom:40px; display:flex; justify-content:space-between; font-size:22px; color:var(--dim); }
+</style>
+</head>
+<body>
+  <div class="field"><div class="blob one"></div><div class="blob two"></div></div>
+  <header>
+    <span>Popcorn AI</span>
+    <span class="couch"><i style="background:#8A5A12">B</i><i style="background:#4A5A72">A</i>Bedirhan and Ayse · 20:41</span>
+  </header>
+  <div class="film">
+    <div class="poster"></div>
+    <div>
+      <h1>Project Hail Mary</h1>
+      <div class="meta">2026 · Science Fiction · Adventure · 2 h 36 min · PG-13 · TMDB 8.6</div>
+      <div class="fit"><b>92% match</b>Fine for this couch</div>
+    </div>
+  </div>
+  <h2>Where to watch tonight</h2>
+  <div class="tiles">
+    <div class="tile on"><span class="k">Included</span><b>Prime Video</b><span class="p">With your Prime membership</span></div>
+    <div class="tile"><span class="k">Rent</span><b>Apple TV</b><span class="p">48 hours to finish</span></div>
+    <div class="tile"><span class="k">Buy</span><b>Google TV</b><span class="p">Keep it in your library</span></div>
+  </div>
+  <p class="about">A science teacher wakes up alone on a spaceship light-years from home and slowly works out that he is humanity's last chance. <b>Director</b> Phil Lord, Christopher Miller · <b>Cast</b> Ryan Gosling, Sandra Hüller</p>
+  <div class="foot"><span>Back: tonight's picks</span><span>Sample platform data · Streaming data by JustWatch</span></div>
+</body>
+</html>

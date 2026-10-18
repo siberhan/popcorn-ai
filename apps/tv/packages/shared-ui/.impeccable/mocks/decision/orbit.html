@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orbit · tonight's picks</title>
+<style>
+  :root { --ground:#0B0D12; --white:#FFFFFF; --mute:#B4BCCB; --dim:#8F98AB; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; background:var(--ground); color:var(--white);
+    font-family:-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif; }
+  .field { position:absolute; inset:-200px; filter:blur(160px); }
+  .blob { position:absolute; border-radius:50%; }
+  .blob.one { width:1000px; height:700px; left:660px; top:80px; background:#2C5C78; opacity:0.55; }
+  .blob.two { width:700px; height:500px; left:1100px; top:420px; background:#96582E; opacity:0.35; }
+  .shade { position:absolute; left:0; right:0; bottom:0; height:460px; background:linear-gradient(transparent, rgba(11,13,18,0.92) 45%); }
+  header { position:absolute; left:96px; right:96px; top:54px; display:flex; justify-content:space-between; align-items:center; font-size:28px; font-weight:500; }
+  .couch { display:flex; align-items:center; gap:14px; color:var(--mute); font-size:24px; }
+  .couch i { width:40px; height:40px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+    font-style:normal; font-size:18px; font-weight:600; color:var(--white); }
+  .stage { position:absolute; left:0; right:0; top:130px; height:560px; perspective:1600px; }
+  /* Poster stand-ins; the app shows the TMDB posters. */
+  .poster { position:absolute; top:0; width:360px; height:540px; border-radius:14px; display:flex; align-items:flex-end; padding:22px;
+    font-size:24px; font-weight:700; letter-spacing:0.02em; }
+  .hail { background:linear-gradient(160deg, #1E4E5C 0%, #C46A2A 60%, #2A1A12 100%); }
+  .avatar { background:linear-gradient(170deg, #5B1F12 0%, #C2502A 45%, #1D3A5A 100%); }
+  .trans { background:linear-gradient(170deg, #1B2C66 0%, #B0302A 55%, #F1A23A 100%); }
+  .spider { background:linear-gradient(170deg, #7A0F14 0%, #C21F26 50%, #1A0A0C 100%); }
+  .desp { background:linear-gradient(170deg, #1C2A52 0%, #4E6FA8 55%, #E8D9A0 100%); }
+  .c { left:780px; box-shadow:0 0 0 6px var(--ground), 0 0 0 10px var(--white), 0 40px 80px rgba(0,0,0,0.6); }
+  .r1 { left:1180px; transform:rotateY(-32deg) scale(0.8); opacity:0.4; filter:blur(2px); }
+  .r2 { left:1500px; transform:rotateY(-44deg) scale(0.64); opacity:0.15; filter:blur(5px); }
+  .l1 { left:380px; transform:rotateY(32deg) scale(0.8); opacity:0.4; filter:blur(2px); }
+  .l2 { left:60px; transform:rotateY(44deg) scale(0.64); opacity:0.15; filter:blur(5px); }
+  .info { position:absolute; left:360px; right:360px; top:716px; text-align:center; }
+  h1 { font-size:52px; font-weight:600; letter-spacing:-0.02em; }
+  .meta { margin-top:12px; font-size:24px; color:var(--mute); }
+  .meta b { color:var(--white); font-weight:600; }
+  .why { margin:30px auto 0; display:flex; gap:20px; justify-content:center; align-items:center; max-width:1100px; }
+  .bars { display:flex; gap:6px; align-items:center; height:36px; }
+  .bars span { width:6px; border-radius:3px; background:var(--white); }
+  .why p { font-size:30px; line-height:1.35; font-weight:500; text-align:left; }
+  .dots { position:absolute; left:0; right:0; bottom:54px; display:flex; justify-content:center; gap:12px; }
+  .dots span { width:10px; height:10px; border-radius:5px; background:rgba(255,255,255,0.3); }
+  .dots span.on { width:34px; background:var(--white); }
+</style>
+</head>
+<body>
+  <div class="field"><div class="blob one"></div><div class="blob two"></div></div>
+  <header>
+    <span>Popcorn AI</span>
+    <span class="couch"><i style="background:#2B5EAE">B</i><i style="background:#A3415F">A</i>Bedirhan and Ayse · 20:41</span>
+  </header>
+  <div class="stage">
+    <div class="poster desp l2"></div>
+    <div class="poster spider l1"></div>
+    <div class="poster trans r2"></div>
+    <div class="poster avatar r1"></div>
+    <div class="poster hail c">PROJECT HAIL MARY</div>
+  </div>
+  <div class="shade"></div>
+  <div class="info">
+    <h1>Project Hail Mary</h1>
+    <div class="meta"><b>92% match</b> · 2026 · Science Fiction · Adventure · TMDB 8.6</div>
+    <div class="why">
+      <div class="bars"><span style="height:14px"></span><span style="height:30px"></span><span style="height:20px"></span><span style="height:10px"></span></div>
+      <p>Bedirhan loves science fiction, and Ayse loves a good adventure.</p>
+    </div>
+  </div>
+  <div class="dots"><span class="on"></span><span></span><span></span><span></span><span></span><span></span></div>
+</body>
+</html>

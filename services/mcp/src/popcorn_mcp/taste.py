@@ -69,13 +69,6 @@ def max_certification(profiles: list[dict]) -> str | None:
     return strictest
 
 
-def member_score(profile: dict, genre_ids) -> float:
-    if not genre_ids:
-        return 0.0
-    total = sum(profile["genres"].get(str(g), 0.0) for g in genre_ids)
-    return max(-1.0, min(1.0, total / len(genre_ids) ** 0.5))
-
-
 def group_score(scores: list[float]) -> float:
     # Mostly the average, but one unhappy person pulls the pick down.
     return 0.6 * mean(scores) + 0.4 * min(scores)
@@ -88,19 +81,3 @@ def group_genre_weights(profiles: list[dict]) -> dict[int, float]:
 
 def vetoed(profiles: list[dict]) -> set[int]:
     return {int(g) for p in profiles for g, w in p["genres"].items() if w <= VETO}
-
-
-def why_line(profiles: list[dict], genre_ids, genres: dict[int, str]) -> str:
-    parts = []
-    for profile in profiles:
-        weight, genre_id = max(((profile["genres"].get(str(g), 0.0), g) for g in genre_ids), default=(0.0, None))
-        if genre_id is None or weight <= 0:
-            continue
-        verb = "loves" if weight >= 0.6 else "likes" if weight >= 0.25 else "is into"
-        parts.append(f"{profile['name']} {verb} {genres.get(genre_id, 'this').lower()}")
-    return " · ".join(parts) if parts else "A crowd favorite to try together"
-
-
-def match_percent(score: float, vote_average: float, boosted: bool) -> int:
-    raw = 72 + 25 * score + (vote_average - 7) * 3 + (4 if boosted else 0)
-    return int(max(40, min(99, round(raw))))

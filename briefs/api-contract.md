@@ -65,6 +65,8 @@ Request: `{"text": "..."}` (max 1500 characters). Response: `200 audio/mpeg` (MP
 
 The page may show a small "TV screen" preview by polling the MCP server's
 `GET http://127.0.0.1:8000/api/state` every 1.5 s. Useful fields: `version`, `screen`
-(`couch` | `duel` | `recommendations` | `details`), `members[].name`, `members[].kid`,
+(`couch` | `duel` | `recommendations` | `details` | `rating`), `members[].name`, `members[].kid`,
 `recommendations[]` (`title`, `year`, `match`, `why`, `poster`), `duel` (`name`, `round`, `total`, `pair[]`),
 `details`, `message`. Make the URL configurable like the agent URL.
+`watching`, `rating` and `focus` are described in `briefs/tv-contract.md`. The voice page drives
+the spoken side of the rating flow and the "why" narration from them (see `briefs/ajan4-voice-rating.md`).
