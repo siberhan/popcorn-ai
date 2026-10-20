@@ -33,6 +33,7 @@ class Settings:
     tts_model: str
     tts_voice: str
     stt_model: str
+    rec_model: str  # the chat model for the picks and the spoken rating summary
 
 
 def load_settings() -> Settings:
@@ -47,4 +48,5 @@ def load_settings() -> Settings:
         tts_model=os.environ.get("POPCORN_TTS_MODEL", "elevenlabs/eleven-flash-v2.5").strip() or "elevenlabs/eleven-flash-v2.5",
         tts_voice=os.environ.get("POPCORN_TTS_VOICE", "sarah").strip() or "sarah",
         stt_model=os.environ.get("POPCORN_STT_MODEL", "openai/whisper-large-v3-turbo").strip() or "openai/whisper-large-v3-turbo",
+        rec_model=os.environ.get("POPCORN_REC_MODEL", "openai/gpt-oss-120b:nitro").strip() or "openai/gpt-oss-120b:nitro",
     )

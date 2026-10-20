@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Image, StyleSheet, Animated, Easing, LayoutChangeEvent } from 'react-native';
+import { View, Text, Image, StyleSheet, Animated, Easing } from 'react-native';
 import {
   SpatialNavigationFocusableView,
   SpatialNavigationNode,
   SpatialNavigationNodeRef,
   DefaultFocus,
 } from 'react-tv-space-navigation';
-import { TVState, Reaction, Rating, RatingAnswer } from '../types';
+import { TVState, Reaction, Rating } from '../types';
 import { scaledPixels } from '../../hooks/useScale';
 import {
   consoleColors,
@@ -20,24 +20,22 @@ import {
 } from '../../theme/console';
 import {
   ConsoleBackdrop,
-  ConsoleHeader,
+  PhoneQr,
   discColorIn,
   discInitialsForName,
   householdOrder,
-  nameSlug,
   useBackKey,
-  useClock,
 } from '../components';
 
 export interface RatingScreenProps {
   state: TVState;
-  /** A hand-rating pill for the person being asked. */
+  /** A written-rating pill for the person being asked. */
   onRate?: (name: string, reaction: Reaction) => void;
   /** Skip the person being asked. */
   onSkip?: () => void;
   /** Back: save what is answered so far. */
   onFinish?: () => void;
-  /** "Back to the couch" on the saved view. */
+  /** Back on a finished (or empty) rating: the couch. */
   onDone?: () => void;
 }
 
@@ -47,36 +45,24 @@ const px = scaledPixels;
 const R = consoleRating;
 const T = consoleRatingType;
 const MO = consoleRatingMotion;
-const W = 1920;
 const SAFE_X = px(consoleLayout.safeX);
-const SAFE_Y = px(consoleLayout.safeY);
 
+// The five written answers, labelled as the contract names them.
 const REACTIONS: { reaction: Reaction; label: string }[] = [
   { reaction: 'loved', label: 'Loved it' },
   { reaction: 'liked', label: 'Liked it' },
-  { reaction: 'meh', label: 'It was fine' },
-  { reaction: 'disliked', label: 'Didn’t like it' },
+  { reaction: 'meh', label: 'It was okay' },
+  { reaction: 'disliked', label: "Didn't like it" },
   { reaction: 'hated', label: 'Hated it' },
 ];
-const LABEL: Record<Reaction, string> = REACTIONS.reduce(
-  (acc, r) => ({ ...acc, [r.reaction]: r.label }),
-  {} as Record<Reaction, string>,
-);
 
-const HAND = 'hand';
 const SKIP = 'skip';
 const COUCH = 'couch';
-const pillId = (r: Reaction) => `r-${r}`;
-
-// The big disc box: disc, ground gap and ring.
-const BIG_BOX = R.disc + 2 * (R.discGap + R.discRing);
-const BIG_CX = W / 2;
-const BIG_CY = R.centerTop + BIG_BOX / 2;
-const SMALL_BOX = R.smallDisc + 2 * (R.smallGap + R.smallRing);
-const FLY_SCALE = R.smallDisc / R.disc;
+const BACK = 'back';
+const pillId = (reaction: Reaction) => `r-${reaction}`;
 
 const TAIL_WORDS = 3; // the unfinished tail shown in secondary while they talk
-const MAX_CHARS = 120; // about three lines at 52 px; older words drop off the front
+const MAX_CHARS = 90; // about two lines at 48 px; older words drop off the front
 
 const isUrl = (u: unknown): u is string => typeof u === 'string' && u.startsWith('http');
 
@@ -87,9 +73,15 @@ function trimFront(text: string): string {
   return `…${space >= 0 ? cut.slice(space + 1) : cut}`;
 }
 
-function answerOf(rating: Rating | null, name: string): RatingAnswer | undefined {
-  if (!rating || !rating.answers) return undefined;
-  return rating.answers[name];
+/** The last spoken answer's summary, so the family sees what Popcorn understood. */
+function spokenSummary(rating: Rating | null): { name: string; quote: string } | null {
+  if (!rating || !rating.answers) return null;
+  const people = Array.isArray(rating.people) ? rating.people : [];
+  for (let i = people.length - 1; i >= 0; i -= 1) {
+    const answer = rating.answers[people[i]];
+    if (answer && answer.by === 'voice' && answer.quote) return { name: people[i], quote: answer.quote };
+  }
+  return null;
 }
 
 function namesLine(names: string[]): string {
@@ -98,18 +90,6 @@ function namesLine(names: string[]): string {
 }
 
 // ---------------------------------------------------------------------------------------------
-
-function BigDisc({ name, color }: { name: string; color: string }) {
-  return (
-    <View style={styles.bigRing}>
-      <View style={styles.bigGap}>
-        <View style={[styles.bigDisc, { backgroundColor: color }]}>
-          <Text style={styles.bigInitials}>{discInitialsForName(name)}</Text>
-        </View>
-      </View>
-    </View>
-  );
-}
 
 function VoiceBars({ active }: { active: boolean }) {
   const values = useMemo(() => R.bars.map(() => new Animated.Value(R.barIdle / R.barsHeight)), []);
@@ -149,7 +129,7 @@ function VoiceBars({ active }: { active: boolean }) {
     };
   }, [active, values, glow]);
 
-  const opacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
+  const opacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
   return (
     <Animated.View style={[styles.bars, { opacity }]}>
       {values.map((v, i) => (
@@ -159,82 +139,59 @@ function VoiceBars({ active }: { active: boolean }) {
   );
 }
 
-interface QuietPillProps {
+interface PillProps {
   label: string;
   onSelect: () => void;
   focusRef: (node: SpatialNavigationNodeRef | null) => void;
-  big?: boolean;
-  solid?: boolean; // white even without focus (the one action on the saved view)
+  solid?: boolean; // white even without focus (the one action on a finished rating)
+  disabled?: boolean;
 }
 
-function QuietPill({ label, onSelect, focusRef, big, solid }: QuietPillProps) {
+/** An outline pill; focused (or solid) it fills white, like every other console action. */
+function Pill({ label, onSelect, focusRef, solid, disabled }: PillProps) {
   return (
-    <SpatialNavigationFocusableView ref={focusRef} onSelect={onSelect}>
-      {({ isFocused }) => (
-        <View style={[styles.pill, big ? styles.pillBig : null, isFocused || solid ? styles.pillFocused : null]}>
-          <Text style={[styles.pillText, big ? styles.pillTextBig : null, isFocused || solid ? styles.onLight : null]}>
-            {label}
-          </Text>
-        </View>
-      )}
+    <SpatialNavigationFocusableView ref={focusRef} onSelect={() => (disabled ? undefined : onSelect())}>
+      {({ isFocused }) => {
+        const lit = isFocused || solid;
+        return (
+          <View style={[styles.pill, lit ? styles.pillFocused : null, disabled ? styles.pillQuiet : null]}>
+            <Text style={[styles.pillText, lit ? styles.onLight : null]}>{label}</Text>
+          </View>
+        );
+      }}
     </SpatialNavigationFocusableView>
   );
 }
 
-function ResultChip({ answer }: { answer: RatingAnswer | undefined }) {
-  if (!answer) return null;
-  if (answer.skipped || !answer.reaction) {
-    return <Text style={styles.skipped}>Skipped</Text>;
-  }
-  return (
-    <View style={styles.chip}>
-      <Text style={styles.chipText}>{LABEL[answer.reaction] || answer.reaction}</Text>
-    </View>
-  );
-}
-
-function FilmTag({ rating }: { rating: Rating | null }) {
-  const clock = useClock();
+/** The film being rated: its poster and its title, nothing else. */
+function Film({ movie }: { movie: Rating['movie'] }) {
   const [failed, setFailed] = useState(false);
-  const movie = rating ? rating.movie : null;
-  useEffect(() => setFailed(false), [movie ? movie.poster : null]);
-  const genres = movie && Array.isArray(movie.genres) ? movie.genres : [];
+  useEffect(() => setFailed(false), [movie.poster]);
+  const genres = Array.isArray(movie.genres) ? movie.genres : [];
   const tintHit = genres.find((g) => consoleGenreTints[g]);
   const tint = tintHit ? consoleGenreTints[tintHit] : consoleColors.fieldTeal;
+  const uri = isUrl(movie.poster) ? movie.poster : null;
+
   return (
     <View style={styles.film}>
-      {movie ? (
-        <View style={[styles.thumb, { backgroundColor: tint }]}>
-          {isUrl(movie.poster) && !failed ? (
-            <Image
-              source={{ uri: movie.poster }}
-              style={styles.thumbImage}
-              resizeMode="cover"
-              onError={() => setFailed(true)}
-            />
-          ) : null}
-        </View>
-      ) : null}
-      <Text style={styles.filmText} numberOfLines={1}>
-        {movie && movie.title ? `${movie.title} · ${clock}` : clock}
+      <View style={[styles.poster, { backgroundColor: tint }]}>
+        {uri && !failed ? (
+          <Image
+            source={{ uri }}
+            style={styles.posterImage}
+            resizeMode="cover"
+            onError={() => setFailed(true)}
+          />
+        ) : null}
+      </View>
+      <Text style={styles.filmTitle} numberOfLines={1}>
+        {movie.title}
       </Text>
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------------------------
-
-interface Flight {
-  from: string;
-  to: string;
-}
-
-interface Geom {
-  fromDx: number;
-  fromDy: number;
-  toDx: number;
-  toDy: number;
-}
 
 export default function RatingScreen({ state, onRate, onSkip, onFinish, onDone }: RatingScreenProps) {
   const rating = state.rating ?? null;
@@ -246,37 +203,13 @@ export default function RatingScreen({ state, onRate, onSkip, onFinish, onDone }
   const order = householdOrder(state);
   const colorOf = (name: string) => discColorIn(order, name, people);
 
-  const [handOpen, setHandOpen] = useState(false);
   const [talking, setTalking] = useState(false);
-  const [shown, setShown] = useState<string | null>(asking); // whose words the centre column shows
-  const [flight, setFlight] = useState<Flight | null>(null);
-  const [geom, setGeom] = useState<Geom | null>(null);
   const [focusTarget, setFocusTarget] = useState<string | null>(null);
 
   const nodeRefs = useRef<Record<string, SpatialNavigationNodeRef | null>>({});
-  const slots = useRef<Record<string, { x: number; y: number }>>({});
-  const rowY = useRef(0);
-  const prevAsking = useRef(asking);
-  const timers = useRef<Timer[]>([]);
   const liveTimer = useRef<Timer | null>(null);
 
-  const fly = useRef(new Animated.Value(0)).current;
-  const textFade = useRef(new Animated.Value(1)).current;
-  const savedFade = useRef(new Animated.Value(done ? 1 : 0)).current;
-
-  const later = (fn: () => void, ms: number) => {
-    const id = setTimeout(() => {
-      timers.current = timers.current.filter((t) => t !== id);
-      fn();
-    }, ms);
-    timers.current.push(id);
-  };
-  const clearTimers = () => {
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-  };
-
-  // Voice bars move only while `live` changed in the last ~1.2 s.
+  // The bars move only while `live` changed in the last ~1.2 s.
   useEffect(() => {
     if (liveTimer.current) clearTimeout(liveTimer.current);
     liveTimer.current = null;
@@ -291,93 +224,20 @@ export default function RatingScreen({ state, onRate, onSkip, onFinish, onDone }
     }, MO.liveMs);
   }, [live]);
 
-  // The spotlight hand-off. Timers own every swap; nothing waits on an Animated end callback.
-  useEffect(() => {
-    const prev = prevAsking.current;
-    prevAsking.current = asking;
-    if (prev === asking) return;
-    clearTimers();
-    setHandOpen(false);
+  useEffect(
+    () => () => {
+      if (liveTimer.current) clearTimeout(liveTimer.current);
+    },
+    [],
+  );
 
-    if (!prev || !asking) {
-      // First person, or the end: no flight.
-      setFlight(null);
-      setGeom(null);
-      setShown(asking);
-      textFade.setValue(1);
-      return;
-    }
-
-    fly.setValue(0);
-    setGeom(null);
-    setFlight({ from: prev, to: asking });
-    Animated.timing(textFade, {
-      toValue: 0,
-      duration: 150,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-    // Let the progress row lay out (the chip that just appeared) before reading the slots.
-    later(() => {
-      const a = slots.current[nameSlug(prev)];
-      const b = slots.current[nameSlug(asking)];
-      const cx = px(BIG_CX);
-      const cy = px(BIG_CY);
-      const y0 = rowY.current;
-      setGeom({
-        fromDx: a ? a.x - cx : 0,
-        fromDy: a ? y0 + a.y - cy : 0,
-        toDx: b ? b.x - cx : 0,
-        toDy: b ? y0 + b.y - cy : 0,
-      });
-    }, MO.handoffSettleMs);
-    later(() => {
-      setShown(asking);
-      Animated.timing(textFade, {
-        toValue: 1,
-        duration: MO.handoffMs - 150,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    }, 150);
-    later(
-      () => {
-        setFlight(null);
-        setGeom(null);
-      },
-      MO.handoffSettleMs + MO.handoffMs + 30,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on whose turn it is
-  }, [asking]);
-
-  useEffect(() => {
-    if (!geom) return;
-    const anim = Animated.timing(fly, {
-      toValue: 1,
-      duration: MO.handoffMs,
-      easing: Easing.inOut(Easing.cubic),
-      useNativeDriver: true,
-    });
-    anim.start();
-    return () => anim.stop();
-  }, [geom, fly]);
-
-  // The saved view fades in and takes the focus.
+  // The finished view has one action; the D-pad lands on it.
   const prevDone = useRef(done);
   useEffect(() => {
     if (prevDone.current === done) return;
     prevDone.current = done;
-    if (done) {
-      savedFade.setValue(0);
-      Animated.timing(savedFade, {
-        toValue: 1,
-        duration: MO.savedMs,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-      setFocusTarget(COUCH);
-    }
-  }, [done, savedFade]);
+    if (done) setFocusTarget(COUCH);
+  }, [done]);
 
   useEffect(() => {
     if (!focusTarget) return;
@@ -389,27 +249,8 @@ export default function RatingScreen({ state, onRate, onSkip, onFinish, onDone }
     setFocusTarget(null);
   }, [focusTarget]);
 
-  useEffect(
-    () => () => {
-      clearTimers();
-      if (liveTimer.current) clearTimeout(liveTimer.current);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount only
-    [],
-  );
-
-  const openHand = () => {
-    setHandOpen(true);
-    setFocusTarget(pillId('loved'));
-  };
-  const closeHand = () => {
-    setHandOpen(false);
-    setFocusTarget(HAND);
-  };
-
   useBackKey(() => {
     if (!rating || done) onDone?.();
-    else if (handOpen) closeHand();
     else onFinish?.();
   });
 
@@ -417,248 +258,155 @@ export default function RatingScreen({ state, onRate, onSkip, onFinish, onDone }
     nodeRefs.current[id] = node;
   };
 
-  const onSlotLayout = (name: string) => (e: LayoutChangeEvent) => {
-    const { x, y, height } = e.nativeEvent.layout;
-    const half = SMALL_BOX / 2;
-    // Relative to the row; the row's own offset is added when read (children report layout first).
-    slots.current[nameSlug(name)] = { x: x + px(half), y: y + height / 2 };
-  };
+  const film = rating ? rating.movie : null;
+  const filmTint = film && Array.isArray(film.genres) ? film.genres.find((g) => consoleGenreTints[g]) : undefined;
+  const tint = asking ? colorOf(asking) : filmTint ? consoleGenreTints[filmTint] : consoleColors.fieldTeal;
 
-  const tint = done || !rating ? consoleColors.fieldTeal : colorOf(asking || shown || people[0] || '');
-
-  // ---- No rating in the state (should not happen on this screen)
+  // ---- Nothing to rate (should not happen on this screen)
+  let body: React.ReactNode;
   if (!rating) {
-    return (
-      <View style={styles.screen}>
-        <ConsoleBackdrop tint={tint} layout="spotlight" fieldOpacity={R.fieldOpacity} />
-        <ConsoleHeader state={state} right={<FilmTag rating={null} />} />
-        <View style={styles.saved}>
-          <Text style={styles.savedTitle}>Nothing to rate right now</Text>
-          <View style={styles.savedAction}>
-            <DefaultFocus>
-              <QuietPill label="Back to the couch" big solid onSelect={() => onDone?.()} focusRef={refFor(COUCH)} />
-            </DefaultFocus>
-          </View>
+    body = (
+      <View style={styles.center}>
+        <Text style={styles.status}>Nothing to rate right now</Text>
+        <View style={styles.action}>
+          <DefaultFocus>
+            <Pill label="Back to the couch" solid onSelect={() => onDone?.()} focusRef={refFor(COUCH)} />
+          </DefaultFocus>
         </View>
       </View>
     );
-  }
-
-  // ---- Saved view
-  if (done) {
+  } else if (done) {
+    // ---- Saved: one line about what was kept, then the way out.
     const answered = people.filter((p) => {
-      const a = answerOf(rating, p);
+      const a = rating.answers ? rating.answers[p] : undefined;
       return a && !a.skipped && a.reaction;
     });
-    const missing = people.length - answered.length;
     const title =
       answered.length === 0
         ? 'Nothing to save this time'
-        : missing === 0
+        : answered.length === people.length
           ? 'Saved to everyone’s taste'
           : `Saved for ${namesLine(answered)}`;
-    return (
-      <View style={styles.screen}>
-        <ConsoleBackdrop tint={tint} layout="spotlight" fieldOpacity={R.fieldOpacity} />
-        <ConsoleHeader state={state} right={<FilmTag rating={rating} />} />
-        <Animated.View style={[styles.saved, { opacity: savedFade }]}>
-          <View style={styles.savedRow}>
-            {people.map((p, i) => {
-              const a = answerOf(rating, p);
-              return (
-                <View key={nameSlug(p)} style={[styles.savedPerson, i > 0 ? styles.savedPersonGap : null]}>
-                  <View style={[styles.savedDisc, { backgroundColor: colorOf(p) }]}>
-                    <Text style={styles.savedInitials}>{discInitialsForName(p)}</Text>
-                  </View>
-                  <Text style={styles.savedName} numberOfLines={1}>
-                    {p}
-                  </Text>
-                  <View style={styles.savedChip}>
-                    {a ? <ResultChip answer={a} /> : <Text style={styles.skipped}>No answer</Text>}
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-          <Text style={styles.savedTitle}>{title}</Text>
-          <View style={styles.savedAction}>
-            <DefaultFocus>
-              <QuietPill label="Back to the couch" big solid onSelect={() => onDone?.()} focusRef={refFor(COUCH)} />
-            </DefaultFocus>
-          </View>
-        </Animated.View>
-        <View style={styles.hintRow}>
-          <Text style={styles.hint}>Back: the couch</Text>
+    body = (
+      <View style={styles.center}>
+        <Text style={styles.status}>{title}</Text>
+        <View style={styles.action}>
+          <DefaultFocus>
+            <Pill label="Back to the couch" solid onSelect={() => onDone?.()} focusRef={refFor(COUCH)} />
+          </DefaultFocus>
         </View>
       </View>
     );
+  } else {
+    // ---- Spotlight: the person answering, their words, the five written answers, Skip, the QR.
+    const words = live.trim();
+    let head = words;
+    let tail = '';
+    if (words && talking) {
+      const parts = words.split(/\s+/);
+      const cut = Math.max(parts.length - TAIL_WORDS, 0);
+      head = parts.slice(0, cut).join(' ');
+      tail = parts.slice(cut).join(' ');
+    }
+    const trimmed = trimFront(head + (head && tail ? ' ' : '') + tail);
+    const tailStart = Math.max(trimmed.length - tail.length, 0);
+    const headText = tail ? trimmed.slice(0, tailStart) : trimmed;
+    const tailText = tail ? trimmed.slice(tailStart) : '';
+    const spoken = spokenSummary(rating);
+
+    body = (
+      <>
+        <View style={styles.center}>
+          {asking ? (
+            <View style={styles.personRow}>
+              <View style={styles.bigRing}>
+                <View style={styles.bigGap}>
+                  <View style={[styles.bigDisc, { backgroundColor: colorOf(asking) }]}>
+                    <Text style={styles.bigInitials}>{discInitialsForName(asking)}</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.questionWrap}>
+                <Text style={styles.question} numberOfLines={1}>
+                  {`${asking}, what did you think?`}
+                </Text>
+                {/* Hung off the end of the question: the bars never move the row while they fade in. */}
+                <View style={styles.barsHang} pointerEvents="none">
+                  <VoiceBars active={talking} />
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          <View style={styles.quoteBox}>
+            {headText || tailText ? (
+              <Text style={styles.quote} numberOfLines={R.quoteLines}>
+                {'“'}
+                {headText}
+                {tailText ? <Text style={styles.quoteTail}>{tailText}</Text> : null}
+                {'”'}
+              </Text>
+            ) : spoken ? (
+              <Text style={styles.quoteSpoken} numberOfLines={R.quoteLines}>
+                {`${spoken.name} said “${spoken.quote}”`}
+              </Text>
+            ) : null}
+          </View>
+
+          <SpatialNavigationNode orientation="vertical">
+            <View style={styles.actions}>
+              <SpatialNavigationNode orientation="horizontal">
+                <View style={styles.pills}>
+                  {REACTIONS.map((r, i) => (
+                    <DefaultFocus key={r.reaction} enable={i === 0}>
+                      <View style={i > 0 ? styles.pillGap : null}>
+                        <Pill
+                          label={r.label}
+                          disabled={!asking}
+                          focusRef={refFor(pillId(r.reaction))}
+                          onSelect={() => {
+                            if (asking) onRate?.(asking, r.reaction);
+                          }}
+                        />
+                      </View>
+                    </DefaultFocus>
+                  ))}
+                </View>
+              </SpatialNavigationNode>
+              <SpatialNavigationNode orientation="horizontal">
+                <View style={[styles.skipRow, styles.row]}>
+                  <Pill label="Skip" disabled={!asking} onSelect={() => onSkip?.()} focusRef={refFor(SKIP)} />
+                  <View style={styles.pillGap}>
+                    <Pill label="Back" onSelect={() => onFinish?.()} focusRef={refFor(BACK)} />
+                  </View>
+                </View>
+              </SpatialNavigationNode>
+            </View>
+          </SpatialNavigationNode>
+        </View>
+
+        <View style={styles.qr}>
+          <PhoneQr caption="Scan to say what you thought" />
+        </View>
+      </>
+    );
   }
-
-  // ---- Spotlight
-  const textPerson = shown || asking;
-  const words = (textPerson === asking ? live : '').trim();
-  let head = words;
-  let tail = '';
-  if (words && talking) {
-    const parts = words.split(/\s+/);
-    const cut = Math.max(parts.length - TAIL_WORDS, 0);
-    head = parts.slice(0, cut).join(' ');
-    tail = parts.slice(cut).join(' ');
-  }
-  const trimmed = trimFront(head + (head && tail ? ' ' : '') + tail);
-  const tailStart = Math.max(trimmed.length - tail.length, 0);
-  const headText = tail ? trimmed.slice(0, tailStart) : trimmed;
-  const tailText = tail ? trimmed.slice(tailStart) : '';
-
-  const askingIdx = asking ? people.indexOf(asking) : -1;
-  const count = askingIdx >= 0 ? askingIdx + 1 : Object.keys(rating.answers || {}).length;
-
-  const g = geom || { fromDx: 0, fromDy: 0, toDx: 0, toDy: 0 };
-  const outStyle = {
-    transform: [
-      { translateX: fly.interpolate({ inputRange: [0, 1], outputRange: [0, g.fromDx] }) },
-      { translateY: fly.interpolate({ inputRange: [0, 1], outputRange: [0, g.fromDy] }) },
-      { scale: fly.interpolate({ inputRange: [0, 1], outputRange: [1, FLY_SCALE] }) },
-    ],
-    opacity: fly.interpolate({ inputRange: [0, 0.85, 1], outputRange: [1, 1, 0] }),
-  };
-  const inStyle = {
-    transform: [
-      { translateX: fly.interpolate({ inputRange: [0, 1], outputRange: [g.toDx, 0] }) },
-      { translateY: fly.interpolate({ inputRange: [0, 1], outputRange: [g.toDy, 0] }) },
-      { scale: fly.interpolate({ inputRange: [0, 1], outputRange: [FLY_SCALE, 1] }) },
-    ],
-    opacity: geom ? fly.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 1, 1] }) : 0,
-  };
 
   return (
     <View style={styles.screen}>
       <ConsoleBackdrop tint={tint} layout="spotlight" fieldOpacity={R.fieldOpacity} />
-      <ConsoleHeader state={state} right={<FilmTag rating={rating} />} />
-
-      <View style={styles.center}>
-        <View style={styles.discSlot}>
-          {!flight && asking ? <BigDisc name={asking} color={colorOf(asking)} /> : null}
-        </View>
-
-        <Animated.View style={[styles.words, { opacity: textFade }]}>
-          <Text style={styles.question} numberOfLines={1}>
-            {textPerson ? `Popcorn: “${textPerson}, what did you think?”` : 'Popcorn is listening'}
-          </Text>
-          <View style={styles.transcriptBox}>
-            {handOpen ? null : headText || tailText ? (
-              <Text style={styles.transcript} numberOfLines={R.transcriptLines}>
-                {'“'}
-                {headText}
-                {tailText ? <Text style={styles.transcriptTail}>{tailText}</Text> : null}
-                {'”'}
-              </Text>
-            ) : (
-              <Text style={styles.waiting}>Say it out loud, or rate by hand</Text>
-            )}
-          </View>
-        </Animated.View>
-
-        {/* Stable nodes keep the hand panel above the controls in D-pad order while it mounts and unmounts. */}
-        <SpatialNavigationNode orientation="vertical">
-          <View style={styles.lower}>
-            <View style={styles.handArea}>
-              <SpatialNavigationNode orientation="horizontal">
-                <View style={styles.handRow}>
-                  {handOpen
-                    ? REACTIONS.map((r, i) => (
-                        <View key={r.reaction} style={i > 0 ? styles.pillGap : null}>
-                          <QuietPill
-                            big
-                            label={r.label}
-                            focusRef={refFor(pillId(r.reaction))}
-                            onSelect={() => {
-                              if (asking) onRate?.(asking, r.reaction);
-                              closeHand();
-                            }}
-                          />
-                        </View>
-                      ))
-                    : null}
-                </View>
-              </SpatialNavigationNode>
-            </View>
-            <VoiceBars active={talking && !handOpen} />
-            <SpatialNavigationNode orientation="horizontal">
-              <View style={styles.controls}>
-                <DefaultFocus>
-                  <QuietPill
-                    label="Rate by hand"
-                    onSelect={() => (handOpen ? closeHand() : openHand())}
-                    focusRef={refFor(HAND)}
-                  />
-                </DefaultFocus>
-                <View style={styles.pillGap}>
-                  <QuietPill label="Skip" onSelect={() => onSkip?.()} focusRef={refFor(SKIP)} />
-                </View>
-              </View>
-            </SpatialNavigationNode>
-          </View>
-        </SpatialNavigationNode>
-      </View>
-
-      {flight ? (
-        <>
-          <Animated.View pointerEvents="none" style={[styles.flyer, outStyle]}>
-            <BigDisc name={flight.from} color={colorOf(flight.from)} />
-          </Animated.View>
-          <Animated.View pointerEvents="none" style={[styles.flyer, inStyle]}>
-            <BigDisc name={flight.to} color={colorOf(flight.to)} />
-          </Animated.View>
-        </>
-      ) : null}
-
-      <View
-        style={styles.progress}
-        onLayout={(e) => {
-          rowY.current = e.nativeEvent.layout.y;
-        }}
-      >
-        {people.map((p) => {
-          const a = answerOf(rating, p);
-          const now = p === asking;
-          const landing = flight !== null && flight.from === p; // the flying disc lands here
-          return (
-            <View key={nameSlug(p)} style={styles.slot} onLayout={onSlotLayout(p)}>
-              <View
-                style={[
-                  styles.smallRing,
-                  now ? styles.smallRingNow : null,
-                  !a && !now ? styles.later : null,
-                  landing ? styles.hidden : null,
-                ]}
-              >
-                <View style={[styles.smallDisc, { backgroundColor: colorOf(p) }]}>
-                  <Text style={styles.smallInitials}>{discInitialsForName(p)}</Text>
-                </View>
-              </View>
-              <ResultChip answer={a} />
-            </View>
-          );
-        })}
-        {people.length > 0 ? <Text style={styles.count}>{`${count} of ${people.length}`}</Text> : null}
-      </View>
-
+      {film ? <Film movie={film} /> : null}
+      {body}
       <View style={styles.hintRow}>
-        <Text style={styles.hint}>{handOpen ? 'Back: close' : 'Back: finish and save'}</Text>
+        <Text style={styles.hint}>{rating && !done ? 'Back: finish and save' : 'Back: the couch'}</Text>
       </View>
     </View>
   );
 }
 
 const BIG = px(R.disc);
-const BIG_BOX_PX = px(BIG_BOX);
-const SMALL = px(R.smallDisc);
-const SMALL_BOX_PX = px(SMALL_BOX);
+const BIG_BOX = px(R.disc + 2 * (R.discGap + R.discRing));
 const PILL_H = px(R.pillHeight);
-const HAND_H = px(R.handPillHeight);
-const SAVED = px(R.savedDisc);
-const QUESTION_LINE = 38;
 
 const styles = StyleSheet.create({
   screen: {
@@ -667,29 +415,33 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  // Header right: poster thumbnail, title and clock
+  // The film
   film: {
+    position: 'absolute',
+    top: px(R.filmTop),
+    left: SAFE_X,
+    right: SAFE_X,
     flexDirection: 'row',
     alignItems: 'center',
-    flexShrink: 1,
-    marginLeft: px(48),
+    justifyContent: 'center',
   },
-  thumb: {
-    width: px(R.thumbWidth),
-    height: px(R.thumbHeight),
-    borderRadius: px(R.thumbRadius),
+  poster: {
+    width: px(R.posterWidth),
+    height: px(R.posterHeight),
+    borderRadius: px(R.posterRadius),
     overflow: 'hidden',
-    marginRight: px(18),
   },
-  thumbImage: {
-    width: px(R.thumbWidth),
-    height: px(R.thumbHeight),
+  posterImage: {
+    width: px(R.posterWidth),
+    height: px(R.posterHeight),
   },
-  filmText: {
-    flexShrink: 1,
-    color: consoleColors.secondary,
-    fontSize: px(T.header),
-    fontWeight: consoleType.weight.medium,
+  filmTitle: {
+    maxWidth: px(1100),
+    marginLeft: px(R.titleGap),
+    color: consoleColors.text,
+    fontSize: px(T.filmTitle),
+    fontWeight: consoleType.weight.semibold,
+    letterSpacing: -px(0.8),
   },
 
   // Spotlight column
@@ -700,25 +452,25 @@ const styles = StyleSheet.create({
     right: SAFE_X,
     alignItems: 'center',
   },
-  discSlot: {
-    width: BIG_BOX_PX,
-    height: BIG_BOX_PX,
+  personRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   bigRing: {
-    width: BIG_BOX_PX,
-    height: BIG_BOX_PX,
-    borderRadius: BIG_BOX_PX / 2,
+    width: BIG_BOX,
+    height: BIG_BOX,
+    borderRadius: BIG_BOX / 2,
     backgroundColor: consoleColors.ring,
     padding: px(R.discRing),
     shadowColor: consoleColors.shadow,
     shadowOpacity: 0.5,
-    shadowRadius: px(60),
-    shadowOffset: { width: 0, height: px(30) },
+    shadowRadius: px(50),
+    shadowOffset: { width: 0, height: px(24) },
     elevation: 14,
   },
   bigGap: {
     flex: 1,
-    borderRadius: (BIG_BOX_PX - px(R.discRing) * 2) / 2,
+    borderRadius: (BIG_BOX - px(R.discRing) * 2) / 2,
     backgroundColor: consoleColors.ground,
     padding: px(R.discGap),
   },
@@ -734,72 +486,55 @@ const styles = StyleSheet.create({
     fontSize: px(T.initials),
     fontWeight: consoleType.weight.semibold,
   },
-  flyer: {
-    position: 'absolute',
-    top: px(R.centerTop),
-    left: px(BIG_CX - BIG_BOX / 2),
-    width: BIG_BOX_PX,
-    height: BIG_BOX_PX,
-  },
-  words: {
+  questionWrap: {
+    flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'stretch',
   },
   question: {
-    marginTop: px(R.questionGap),
-    color: consoleColors.secondary,
+    maxWidth: px(1000),
+    marginLeft: px(40),
+    color: consoleColors.text,
     fontSize: px(T.question),
-    lineHeight: px(QUESTION_LINE),
-    fontWeight: consoleType.weight.medium,
+    fontWeight: consoleType.weight.semibold,
   },
-  transcriptBox: {
-    marginTop: px(22),
-    width: px(R.transcriptWidth),
-    height: px(T.transcriptLine * R.transcriptLines),
+
+  // Live words and the last spoken summary share one box so nothing jumps.
+  quoteBox: {
+    marginTop: px(R.quoteGap),
+    width: px(R.quoteWidth),
+    height: px(T.quoteLine * R.quoteLines),
     justifyContent: 'center',
     alignItems: 'center',
   },
-  transcript: {
+  barsHang: {
+    position: 'absolute',
+    left: '100%',
+    marginLeft: px(20),
+    justifyContent: 'center',
+  },
+  quote: {
+    flexShrink: 1,
     textAlign: 'center',
     color: consoleColors.text,
-    fontSize: px(T.transcript),
-    lineHeight: px(T.transcriptLine),
+    fontSize: px(T.quote),
+    lineHeight: px(T.quoteLine),
     fontWeight: consoleType.weight.semibold,
     letterSpacing: -px(0.5),
   },
-  transcriptTail: {
+  quoteTail: {
     color: consoleColors.secondary,
   },
-  waiting: {
+  quoteSpoken: {
     textAlign: 'center',
-    color: consoleColors.placeholder,
-    fontSize: px(T.question),
+    color: consoleColors.secondary,
+    fontSize: px(T.quoteSpoken),
+    lineHeight: px(T.quoteLine),
     fontWeight: consoleType.weight.medium,
   },
-  // The hand panel sits over the transcript box (same place), pulled up from the bars.
-  handArea: {
-    position: 'absolute',
-    top: -px(T.transcriptLine * R.transcriptLines), // over the transcript box, just above
-    left: 0,
-    right: 0,
-    height: px(T.transcriptLine * R.transcriptLines),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  lower: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-  },
-  handRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   bars: {
-    marginTop: px(30),
     height: px(R.barsHeight),
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
   },
   bar: {
     width: px(R.barWidth),
@@ -810,28 +545,33 @@ const styles = StyleSheet.create({
   barGap: {
     marginLeft: px(R.barGap),
   },
-  controls: {
-    marginTop: px(34),
+
+  actions: {
+    alignItems: 'center',
+  },
+  pills: {
+    marginTop: px(10),
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
   },
   pillGap: {
     marginLeft: px(R.pillGap),
   },
+  skipRow: {
+    marginTop: px(R.skipGap),
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   pill: {
     height: PILL_H,
     borderRadius: PILL_H / 2,
-    paddingHorizontal: px(30),
+    paddingHorizontal: px(R.pillPadding),
     borderWidth: px(2),
     borderColor: consoleRatingColors.pillOutline,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  pillBig: {
-    height: HAND_H,
-    borderRadius: HAND_H / 2,
-    paddingHorizontal: px(34),
   },
   pillFocused: {
     backgroundColor: consoleColors.cta,
@@ -843,89 +583,34 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: px(16) },
     elevation: 10,
   },
-  pillText: {
-    color: consoleColors.secondary,
-    fontSize: px(T.pill),
-    fontWeight: consoleType.weight.medium,
+  pillQuiet: {
+    opacity: R.quietOpacity,
   },
-  pillTextBig: {
+  pillText: {
     color: consoleColors.text,
-    fontSize: px(T.handPill),
+    fontSize: px(T.pill),
     fontWeight: consoleType.weight.semibold,
   },
   onLight: {
     color: consoleColors.onLight,
   },
 
-  // Progress row
-  progress: {
+  // Phone QR: the spoken path, out of the way of the buttons
+  qr: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: px(R.progressBottom) - px(R.smallGap + R.smallRing),
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    top: px(R.qrTop),
+    right: SAFE_X,
   },
-  slot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: px(16),
-  },
-  smallRing: {
-    width: SMALL_BOX_PX,
-    height: SMALL_BOX_PX,
-    borderRadius: SMALL_BOX_PX / 2,
-    borderWidth: px(R.smallRing),
-    borderColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  smallRingNow: {
-    borderColor: consoleColors.ring,
-  },
-  later: {
-    opacity: R.laterOpacity,
-  },
-  hidden: {
-    opacity: 0,
-  },
-  smallDisc: {
-    width: SMALL,
-    height: SMALL,
-    borderRadius: SMALL / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  smallInitials: {
+
+  // Finished / empty
+  status: {
     color: consoleColors.text,
-    fontSize: px(T.smallInitials),
+    fontSize: px(T.status),
     fontWeight: consoleType.weight.semibold,
+    letterSpacing: -px(0.4),
   },
-  chip: {
-    marginLeft: px(10),
-    height: px(R.chipHeight),
-    paddingHorizontal: px(14),
-    borderRadius: px(R.chipHeight / 2),
-    backgroundColor: consoleColors.cta,
-    justifyContent: 'center',
-  },
-  chipText: {
-    color: consoleColors.onLight,
-    fontSize: px(T.chip),
-    fontWeight: consoleType.weight.semibold,
-  },
-  skipped: {
-    marginLeft: px(10),
-    color: consoleColors.placeholder,
-    fontSize: px(T.chip),
-    fontWeight: consoleType.weight.medium,
-  },
-  count: {
-    marginLeft: px(8),
-    color: consoleColors.secondary,
-    fontSize: px(T.count),
-    fontWeight: consoleType.weight.medium,
+  action: {
+    marginTop: px(40),
   },
 
   hintRow: {
@@ -939,61 +624,5 @@ const styles = StyleSheet.create({
     color: consoleColors.placeholder,
     fontSize: px(T.hint),
     fontWeight: consoleType.weight.medium,
-  },
-
-  // Saved view
-  saved: {
-    position: 'absolute',
-    top: px(260),
-    left: SAFE_X,
-    right: SAFE_X,
-    alignItems: 'center',
-  },
-  savedRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  savedPerson: {
-    alignItems: 'center',
-    width: px(200),
-  },
-  savedPersonGap: {
-    marginLeft: px(24),
-  },
-  savedDisc: {
-    width: SAVED,
-    height: SAVED,
-    borderRadius: SAVED / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  savedInitials: {
-    color: consoleColors.text,
-    fontSize: px(T.savedInitials),
-    fontWeight: consoleType.weight.semibold,
-  },
-  savedName: {
-    marginTop: px(16),
-    color: consoleColors.text,
-    fontSize: px(T.savedName),
-    fontWeight: consoleType.weight.medium,
-  },
-  savedChip: {
-    marginTop: px(12),
-    height: px(R.chipHeight),
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: -px(10), // the chip carries a left margin for the progress row
-  },
-  savedTitle: {
-    marginTop: px(64),
-    color: consoleColors.text,
-    fontSize: px(T.savedTitle),
-    fontWeight: consoleType.weight.semibold,
-    letterSpacing: -px(0.4),
-  },
-  savedAction: {
-    marginTop: px(40),
   },
 });

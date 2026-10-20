@@ -14,7 +14,7 @@ function nameHash(name: string): number {
 
 /**
  * Deterministic warm cinema avatar color derived from a person's name.
- * Matches apps/alexa-web/config.js and tokens.json.
+ * Matches the v1 design tokens.
  */
 export function avatarColorForName(name: string): string {
   return colors.avatar[nameHash(name) % colors.avatar.length];

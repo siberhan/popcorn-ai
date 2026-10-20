@@ -1,4 +1,4 @@
-// Mapped from apps/alexa-web/design/tokens.json
+// Mapped from the v1 design tokens
 
 export const spacing = {
   1: 4,

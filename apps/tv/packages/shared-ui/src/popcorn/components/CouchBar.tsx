@@ -20,7 +20,9 @@ export interface CouchBarProps {
 
 const SCREEN_LABELS: Record<Screen, string> = {
   couch: 'TONIGHT ON THE COUCH',
-  duel: 'POSTER DUEL',
+  genres: 'THEIR GENRES',
+  favorites: 'FAVORITE FILMS',
+  ask: 'TONIGHT',
   recommendations: "TONIGHT'S PICKS",
   details: 'MOVIE DETAILS',
   rating: 'HOW WAS IT',

@@ -21,9 +21,10 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 
 from .config import load_settings
+from .llm import LLMError, OpenRouterLLM
 from .voice_stt import MAX_BYTES, OpenRouterSTT, TranscribeError
 from .voice_tts import OpenRouterTTS
-from .service import REACTION_DELTA, SCREENS_BACK, SPEECH_MAX, VOICE_STATES, Popcorn, PopcornError, Reaction
+from .service import REACTIONS, SCREENS_BACK, UNSET, VOICE_STATES, Popcorn, PopcornError, Reaction
 from .store import DynamoStore, MemoryStore
 from .tmdb import TMDB, TMDBError
 
@@ -31,13 +32,12 @@ STATIC = Path(__file__).parent / "static"
 AUDIO_TYPES = {"wav": "audio/wav", "mp3": "audio/mpeg"}
 
 INSTRUCTIONS = """\
-Popcorn AI helps the people on the couch pick a film and shows everything on their TV.
-1. Who is watching? -> set_couch (or add_to_couch / remove_from_couch). Results include each person's memory.
-2. New people: duel_candidates(name), then start_duel(name, pairs) with 3-6 contrasting pairs from that list.
-   Save what people say about their taste with update_taste (genres and a short note).
-3. Picks: find_candidates (filters from what they asked for), choose 4-8 films, then show_picks with one
-   spoken, spoiler-free "why" sentence per film. "We've seen X" -> mark_seen.
-4. Back from the film -> start_rating; save each spoken answer with record_reaction. The TV asks the questions.
+Popcorn AI keeps the profile of everyone in the household and puts tonight's film on their TV.
+1. Who is watching? -> set_couch, or add_to_couch / remove_from_couch. A person is a name and an age.
+2. A new person picks genres on the TV (save_genres); they then pick their favorite films.
+3. Show picks -> recommend: ten films for everyone on the couch, with one spoken line each. `request` is
+   what they feel like tonight, if they said.
+4. Watch: get_movie_details. Back from the film -> start_rating; every answer is saved with record_reaction.
 Every tool that changes the TV screen updates it right away.
 """
 
@@ -45,32 +45,23 @@ READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 UPDATES_TV = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False)
 PHONE_FILES = {"index.html": "text/html; charset=utf-8", "app.js": "text/javascript; charset=utf-8",
                "styles.css": "text/css; charset=utf-8"}
-Gender = Literal["male", "female"]
 
 
 class Person(BaseModel):
-    name: str = Field(description="First name as said, or a label like \"Ahmet's son\" if they won't give a name")
-    age: int | None = Field(default=None, description="Age in years, if known. Under 13 = child, under 17 = teen.")
-    kid: bool | None = Field(default=None, description="True if a child and the age is unknown.")
-    role: str | None = Field(default=None, description="Short family role: 'dad', 'mom', 'older son', 'grandma'.")
-    gender: Gender | None = Field(default=None, description="Only if clear from what was said.")
-    named: bool | None = Field(default=None, description="False when `name` is a label, not a real name.")
-
-
-class Pick(BaseModel):
-    movie_id: int = Field(description="id from the last find_candidates result")
-    why: str = Field(description="One spoken, spoiler-free sentence for the people on the couch, max 220 chars")
-    match: int = Field(description="How well it fits this couch, 50-99")
+    name: str = Field(description="The name as said.")
+    age: int | None = Field(default=None, description="Age in years, if known. Under 13 = child.")
 
 
 def _user_errors(func):
-    """Turn expected problems into messages the agent can read out."""
+    """Turn expected problems into messages the caller can read out."""
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         try:
             return await func(*args, **kwargs)
         except PopcornError as exc:
+            raise ToolError(str(exc)) from exc
+        except LLMError as exc:
             raise ToolError(str(exc)) from exc
         except TMDBError as exc:
             raise ToolError("The movie database is not answering right now. Try again in a moment.") from exc
@@ -83,26 +74,26 @@ def build_service() -> Popcorn:
     store = DynamoStore(settings.table_name, settings.region) if settings.table_name else MemoryStore()
     speaker = (OpenRouterTTS(settings.openrouter_api_key, settings.tts_model, settings.tts_voice)
                if settings.openrouter_api_key else None)
-    return Popcorn(store, TMDB(settings.tmdb_token, store), settings.household, settings.watch_region, speaker)
+    llm = (OpenRouterLLM(settings.openrouter_api_key, settings.rec_model)
+           if settings.openrouter_api_key else None)
+    return Popcorn(store, TMDB(settings.tmdb_token, store), settings.household, settings.watch_region, speaker, llm)
 
 
 def build_mcp(popcorn: Popcorn) -> MCPServer:
-    mcp = MCPServer(name="popcorn-ai", title="Popcorn AI", instructions=INSTRUCTIONS, version="0.2.0")
+    mcp = MCPServer(name="popcorn-ai", title="Popcorn AI", instructions=INSTRUCTIONS, version="0.3.0")
 
     @mcp.tool(annotations=UPDATES_TV)
     @_user_errors
     async def set_couch(people: list[Person]) -> dict:
-        """Set who is on the couch tonight (replaces the couch). Unknown people get a new profile.
-        Returns each person's memory; use it, it is not repeated anywhere else."""
+        """Set who is on the couch tonight (replaces the couch). Unknown people get a new profile and go to the
+        genre screen first. Returns each person as the TV sees them."""
         return await popcorn.set_couch([p.model_dump() for p in people])
 
     @mcp.tool(annotations=UPDATES_TV)
     @_user_errors
-    async def add_to_couch(name: str, age: int | None = None, kid: bool | None = None, role: str | None = None,
-                           gender: Gender | None = None, named: bool | None = None) -> dict:
-        """Add one person to the couch; returns their memory. On the reel, films that no longer fit
-        (e.g. a child joined) fade out: see removed_from_screen. Args as in set_couch."""
-        return await popcorn.add_to_couch(name, age, kid, role, gender, named)
+    async def add_to_couch(name: str, age: int | None = None) -> dict:
+        """Add one person to the couch; a new person goes to the genre screen, a known one back to the couch."""
+        return await popcorn.add_to_couch(name, age)
 
     @mcp.tool(annotations=UPDATES_TV)
     @_user_errors
@@ -113,93 +104,31 @@ def build_mcp(popcorn: Popcorn) -> MCPServer:
     @mcp.tool(annotations=READ_ONLY)
     @_user_errors
     async def get_profiles(names: list[str] | None = None) -> dict:
-        """Memory for the given people, or for everyone in the household if no names are given.
-        Also says who is on the couch right now."""
+        """Genres, favorite films and reviews for the given people, or for everyone in the household if no names
+        are given. Also says who is on the couch right now."""
         state = await popcorn.tv_state()
         return {"profiles": await popcorn.get_profiles(names), "on_couch": [m["name"] for m in state["members"]]}
 
     @mcp.tool(annotations=UPDATES_TV)
     @_user_errors
-    async def update_taste(
-        name: str,
-        loves: list[str] | None = None,
-        likes: list[str] | None = None,
-        dislikes: list[str] | None = None,
-        hates: list[str] | None = None,
-        note: str | None = None,
-        role: str | None = None,
-        gender: Gender | None = None,
-        age: int | None = None,
-    ) -> dict:
-        """Save what someone said about their taste. Genres are names like comedy, sci-fi, animation, horror;
-        "hates" = never show it while they are on the couch. note: one short fact in your words (max 140 chars),
-        e.g. "Loves superhero films, more so mixed with horror". role/gender/age: update if they told you."""
-        return await popcorn.update_taste(name, loves, likes, dislikes, hates, note, role, gender, age)
-
-    @mcp.tool(annotations=UPDATES_TV)
-    @_user_errors
     async def rename_person(name: str, new_name: str) -> dict:
-        """Give a person saved under a label (e.g. "Ahmet's son") their real name, or fix a misheard name."""
+        """Fix a misheard name."""
         return await popcorn.rename_person(name, new_name)
 
     @mcp.tool(annotations=UPDATES_TV)
     @_user_errors
-    async def find_candidates(
-        genres: list[str] | None = None,
-        without_genres: list[str] | None = None,
-        keywords: list[str] | None = None,
-        without_keywords: list[str] | None = None,
-        year_from: int | None = None,
-        year_to: int | None = None,
-        exclude_ids: list[int] | None = None,
-    ) -> dict:
-        """Up to 40 films for the couch to choose from: on a streaming service here, kid-safe for this couch,
-        nothing anyone on the couch watched or hates. Call before show_picks, and again after feedback.
-        genres: any of (TMDB names, e.g. ["Science Fiction"]); leave empty to use the couch's taste.
-        keywords: plain words like "superhero", "time travel", "heist". exclude_ids: films to leave out."""
-        return await popcorn.find_candidates(genres, without_genres, keywords, without_keywords, year_from, year_to,
-                                             exclude_ids)
+    async def save_genres(name: str, genres: list[str]) -> dict:
+        """Save the TMDB genres a person picked (names like "Comedy", "Science Fiction", "Mystery").
+        A person who has not finished favorites gets the page opened in the same request."""
+        return await popcorn.save_genres(name, genres)
 
     @mcp.tool(annotations=UPDATES_TV)
     @_user_errors
-    async def show_picks(picks: list[Pick]) -> dict:
-        """Show 4-8 films from the last find_candidates list on the TV reel. Each `why` is read aloud on the TV
-        when the reel stops on that film, so write it for the people on the couch, by name when it helps."""
-        return await popcorn.show_picks([p.model_dump() for p in picks])
-
-    @mcp.tool(annotations=UPDATES_TV)
-    @_user_errors
-    async def mark_seen(names: list[str], movie_ids: list[int]) -> dict:
-        """Save that these people have already seen these films (no rating). Their cards leave the reel.
-        names: empty = everyone on the couch."""
-        return await popcorn.mark_seen(names, movie_ids)
-
-    @mcp.tool(annotations=UPDATES_TV)
-    @_user_errors
-    async def duel_candidates(name: str) -> dict:
-        """About 50 well-known films for one person's poster duel, across genres, kid-safe for them and the couch.
-        Then call start_duel with pairs from this list."""
-        return await popcorn.duel_candidates(name)
-
-    @mcp.tool(annotations=UPDATES_TV)
-    @_user_errors
-    async def start_duel(name: str, pairs: list[list[int]]) -> dict:
-        """Start a poster duel on the TV. pairs: 3-6 [left_id, right_id] from that person's last duel_candidates,
-        each pair contrasting two tastes, no film twice. They pick with the remote; you hear about it later."""
-        return await popcorn.start_duel(name, pairs)
-
-    @mcp.tool(annotations=UPDATES_TV)
-    @_user_errors
-    async def record_duel_choice(pick: Literal["left", "right", "skip"]) -> dict:
-        """Record a duel pick said by voice ("the left one"). skip ends the duel."""
-        return await popcorn.record_duel_choice(pick)
-
-    @mcp.tool(annotations=UPDATES_TV)
-    @_user_errors
-    async def mark_watched(movie: str, reactions: dict[str, Reaction] | None = None, who: list[str] | None = None) -> dict:
-        """Quick one-shot save that a movie was watched, with reactions, e.g. {"Ayse": "loved"}.
-        movie: a title or TMDB id. who: watchers (default: everyone on the couch). Prefer start_rating."""
-        return await popcorn.mark_watched(movie, reactions, who)
+    async def recommend(more: bool = False, request: str | None = None) -> dict:
+        """Ten films for everyone on the couch, each with one spoken spoiler-free `why` line: screen
+        `recommendations`. more=true asks again without the films already shown this evening. `request`:
+        what they feel like tonight ("" for nothing; left out keeps tonight's)."""
+        return await popcorn.recommend(more, request)
 
     @mcp.tool(annotations=UPDATES_TV)
     @_user_errors
@@ -211,16 +140,17 @@ def build_mcp(popcorn: Popcorn) -> MCPServer:
     @mcp.tool(annotations=UPDATES_TV)
     @_user_errors
     async def start_rating(movie: str | None = None) -> dict:
-        """Call when the family is back from the film. The TV asks each person in turn by voice.
+        """The family is back from the film: the TV asks each person in turn.
         movie: only if they name a different film; by default the one they went to watch."""
         return await popcorn.start_rating(movie)
 
     @mcp.tool(annotations=UPDATES_TV)
     @_user_errors
-    async def record_reaction(name: str, reaction: Reaction | None, quote: str = "") -> dict:
-        """Save one person's spoken answer during the rating. reaction null = they skipped or passed.
-        quote: their own words, short. Answering again overwrites. The TV speaks the next question itself."""
-        return await popcorn.record_reaction(name, reaction, quote, "voice")
+    async def record_reaction(name: str, reaction: Reaction | None, summary: str = "") -> dict:
+        """Save one person's answer during the rating. reaction null = they skipped or passed.
+        summary: their opinion in one short line (max 15 words) when it came from speaking.
+        Answering again overwrites. The TV speaks the next question itself."""
+        return await popcorn.record_reaction(name, reaction, summary, "voice")
 
     return mcp
 
@@ -233,6 +163,8 @@ def add_tv_routes(mcp: MCPServer, popcorn: Popcorn, transcriber: OpenRouterSTT |
             return JSONResponse(await call())
         except PopcornError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
+        except LLMError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=502)
         except TMDBError:
             return JSONResponse({"error": "The movie database is not answering right now."}, status_code=503)
 
@@ -254,6 +186,13 @@ def add_tv_routes(mcp: MCPServer, popcorn: Popcorn, transcriber: OpenRouterSTT |
     async def health(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
 
+    @mcp.custom_route("/events", methods=["POST"])
+    async def events(request: Request) -> JSONResponse:
+        """Non-HTTP Lambda events: Lambda Web Adapter POSTs them here (AWS_LWA_PASS_THROUGH_PATH)."""
+        if await body_of(request) != {"popcorn": "seed_catalog"}:
+            return bad('send {"popcorn": "seed_catalog"}')
+        return await handle(popcorn.seed_catalog)
+
     @mcp.custom_route("/static/backdrop-blob.png", methods=["GET"])
     async def backdrop_blob(request: Request) -> FileResponse:
         # Vega cannot load images bundled from the shared UI package, so the TV fetches this one over HTTPS.
@@ -263,49 +202,92 @@ def add_tv_routes(mcp: MCPServer, popcorn: Popcorn, transcriber: OpenRouterSTT |
     async def state(request: Request) -> JSONResponse:
         return await handle(popcorn.tv_state)
 
-    @mcp.custom_route("/api/rating", methods=["GET"])
-    async def rating(request: Request) -> JSONResponse:
-        """Just the screen and the rating round: one store read, for the voice agent's every turn."""
-        async def call():
-            state = await popcorn.get_state()
-            return {"screen": state["screen"], "rating": state["rating"]}
-        return await handle(call)
-
-    @mcp.custom_route("/api/duel", methods=["POST"])
-    async def duel(request: Request) -> JSONResponse:
-        body = await body_of(request) or {}
-        if body.get("pick") not in ("left", "right", "skip"):
-            return bad("pick must be 'left', 'right' or 'skip'")
-        return await handle(lambda: popcorn.record_duel_choice(body["pick"]))
+    @mcp.custom_route("/api/genres", methods=["GET"])
+    async def genres(request: Request) -> JSONResponse:
+        return await handle(popcorn.genres_list)
 
     @mcp.custom_route("/api/couch", methods=["POST"])
     async def couch(request: Request) -> JSONResponse:
+        """Add or remove one person. A new person comes back on screen `genres`."""
         body = await body_of(request) or {}
-        if body.get("add"):
-            return await handle(lambda: popcorn.add_to_couch(body["add"], body.get("age"), body.get("kid")))
-        if body.get("remove"):
+        if isinstance(body.get("add"), str) and body["add"].strip():
+            age = body.get("age")
+            if age is not None and (not isinstance(age, int) or isinstance(age, bool)):
+                return bad("age must be a whole number")
+            return await handle(lambda: popcorn.add_to_couch(body["add"], age))
+        if isinstance(body.get("remove"), str) and body["remove"].strip():
             return await handle(lambda: popcorn.remove_from_couch(body["remove"]))
-        return JSONResponse({"error": "send {'add': name} or {'remove': name}"}, status_code=400)
+        return JSONResponse({"error": "send {'add': name, 'age'?: n} or {'remove': name}"}, status_code=400)
+
+    @mcp.custom_route("/api/person", methods=["POST"])
+    async def person(request: Request) -> JSONResponse:
+        """Save a person's genres (and start their favorites when never done), or edit name/age, or delete."""
+        body = await body_of(request) or {}
+        if isinstance(body.get("delete"), str) and body["delete"].strip():
+            return await handle(lambda: popcorn.delete_person(body["delete"]))
+        if isinstance(body.get("edit"), str) and body["edit"].strip():
+            new_name, age = body.get("name"), body.get("age", UNSET)
+            if new_name is not None and not isinstance(new_name, str):
+                return bad("name must be a string")
+            if age is not UNSET and age is not None and (not isinstance(age, int) or isinstance(age, bool)):
+                return bad("age must be a whole number or null")
+            return await handle(lambda: popcorn.edit_person(body["edit"], new_name, age))
+        name, genres = body.get("name"), body.get("genres")
+        if isinstance(name, str) and name.strip() and isinstance(genres, list):
+            if not all(isinstance(g, str) and g.strip() for g in genres):
+                return bad("genres must be a list of genre names")
+            return await handle(lambda: popcorn.save_genres(name, genres))
+        return bad("send {'name': s, 'genres': [s]} or {'edit': name, 'name'?: s, 'age'?: n|null} or {'delete': name}")
+
+    @mcp.custom_route("/api/favorites/catalog", methods=["GET"])
+    async def favorites_catalog(request: Request) -> JSONResponse:
+        return await handle(popcorn.get_favorites_catalog)
+
+    @mcp.custom_route("/api/favorites", methods=["POST"])
+    async def favorites(request: Request) -> JSONResponse:
+        body = await body_of(request) or {}
+        if "start" in body:
+            start = body["start"]
+            if not isinstance(start, str) or not start.strip():
+                return bad("send {'start': name}")
+            return await handle(lambda: popcorn.start_favorites(start))
+        if "toggle" in body:
+            toggle = body["toggle"]
+            if not isinstance(toggle, int) or isinstance(toggle, bool):
+                return bad("toggle must be an integer id")
+            return await handle(lambda: popcorn.toggle_favorite(toggle))
+        if "query" in body:
+            query = body["query"]
+            if not isinstance(query, str):
+                return bad("query must be a string")
+            return await handle(lambda: popcorn.query_favorites(query))
+        if "done" in body:
+            if body["done"] is not True:
+                return bad("done must be true")
+            return await handle(popcorn.done_favorites)
+        return bad("send {'start': name}, {'toggle': id}, {'query': s} or {'done': true}")
+
+    @mcp.custom_route("/api/ask", methods=["POST"])
+    async def ask(request: Request) -> JSONResponse:
+        """No text: open the "what do you feel like tonight?" screen. With text: check it, then the picks."""
+        text = (await body_of(request) or {}).get("text")
+        if text is None:
+            return await handle(popcorn.open_ask)
+        if not isinstance(text, str):
+            return bad("text must be a string")
+        return await handle(lambda: popcorn.ask(text))
 
     @mcp.custom_route("/api/recommend", methods=["POST"])
     async def recommend(request: Request) -> JSONResponse:
-        # v2: picks come from the agent (POST {AGENT}/event {"event": "show_picks"}).
-        return JSONResponse({"error": "Show picks now goes through Popcorn's voice agent."}, status_code=410)
-
-    @mcp.custom_route("/api/seen", methods=["POST"])
-    async def seen(request: Request) -> JSONResponse:
-        """Details screen "Already seen": watched (no reaction) for the couch, card removed, back to the reel."""
-        if (movie_id := movie_id_of(await body_of(request))) is None:
-            return bad("send {'movie_id': n}")
-        return await handle(lambda: popcorn.mark_seen(None, [movie_id], back_to_reel=True))
-
-    @mcp.custom_route("/api/speech", methods=["POST"])
-    async def speech(request: Request) -> JSONResponse:
+        """Tonight's picks: one LLM call, ten kid-checked cards on the reel. more=true leaves out this evening's.
+        `request` sets tonight's wish without the check ("" = Skip); left out keeps it."""
         body = await body_of(request) or {}
-        text = body.get("text")
-        if not isinstance(text, str) or not text.strip() or len(text) > SPEECH_MAX:
-            return bad(f"send {{'text': s}} with 1 to {SPEECH_MAX} characters")
-        return await handle(lambda: popcorn.push_speech(text))
+        more, wish = body.get("more", False), body.get("request")
+        if not isinstance(more, bool):
+            return bad("more must be true or false")
+        if not isinstance(wish, (str, type(None))):
+            return bad("request must be a string")
+        return await handle(lambda: popcorn.recommend(more, wish))
 
     @mcp.custom_route("/api/voice", methods=["POST"])
     async def voice(request: Request) -> JSONResponse:
@@ -374,7 +356,7 @@ def add_tv_routes(mcp: MCPServer, popcorn: Popcorn, transcriber: OpenRouterSTT |
     async def screen(request: Request) -> JSONResponse:
         body = await body_of(request) or {}
         if body.get("screen") not in SCREENS_BACK:
-            return bad("screen must be 'recommendations' or 'couch'")
+            return bad("screen must be 'recommendations', 'ask' or 'couch'")
         return await handle(lambda: popcorn.go_to(body["screen"]))
 
     @mcp.custom_route("/api/focus", methods=["POST"])
@@ -399,9 +381,20 @@ def add_tv_routes(mcp: MCPServer, popcorn: Popcorn, transcriber: OpenRouterSTT |
     async def rating_answer(request: Request) -> JSONResponse:
         body = await body_of(request) or {}
         name, reaction = body.get("name"), body.get("reaction")
-        if not isinstance(name, str) or not name.strip() or reaction not in REACTION_DELTA:
-            return bad(f"send {{'name': s, 'reaction': one of {', '.join(REACTION_DELTA)}}}")
+        if not isinstance(name, str) or not name.strip() or reaction not in REACTIONS:
+            return bad(f"send {{'name': s, 'reaction': one of {', '.join(REACTIONS)}}}")
         return await handle(lambda: popcorn.record_reaction(name, reaction, "", "hand"))
+
+    @mcp.custom_route("/api/rating/voice", methods=["POST"])
+    async def rating_voice(request: Request) -> JSONResponse:
+        """A spoken answer from the phone: the LLM saves a reaction and a one-line summary."""
+        body = await body_of(request) or {}
+        text, name = body.get("text"), body.get("name")
+        if not isinstance(text, str) or not text.strip():
+            return bad("I didn't catch that, try again or use the buttons")
+        if name is not None and (not isinstance(name, str) or not name.strip()):
+            return bad("name must be a non-empty string")
+        return await handle(lambda: popcorn.voice_reaction(text, name))
 
     @mcp.custom_route("/api/rating/skip", methods=["POST"])
     async def rating_skip(request: Request) -> JSONResponse:

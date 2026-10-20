@@ -61,51 +61,35 @@ class TMDB:
             self._genres = {g["id"]: g["name"] for g in data["genres"]}
         return self._genres
 
+    async def trending(self, page: int = 1) -> list[dict]:
+        """One page of /trending/movie/week."""
+        data = await self._get("/trending/movie/week", {"language": "en-US", "page": page})
+        return [m for m in data.get("results", []) if not m.get("adult")]
+
     async def discover(
         self,
         with_genres: str | None = None,
-        without_genres: str | None = None,
-        max_certification: str | None = None,
         min_votes: int = 300,
         page: int = 1,
         sort_by: str = "popularity.desc",
-        with_keywords: str | None = None,
-        without_keywords: str | None = None,
-        year_from: int | None = None,
-        year_to: int | None = None,
-        watch_region: str | None = None,
-        monetization: str | None = None,
     ) -> list[dict]:
-        """One page of /discover/movie. `monetization` (e.g. "flatrate") needs `watch_region`."""
+        """One page of /discover/movie, e.g. the best films of all time for the favorites catalog."""
         params = {
             "with_genres": with_genres,
-            "without_genres": without_genres,
-            "with_keywords": with_keywords,
-            "without_keywords": without_keywords,
-            "primary_release_date.gte": f"{year_from}-01-01" if year_from else None,
-            "primary_release_date.lte": f"{year_to}-12-31" if year_to else None,
-            "watch_region": watch_region,
-            "with_watch_monetization_types": monetization,
             "sort_by": sort_by,
             "vote_count.gte": min_votes,
             "include_adult": "false",
             "language": "en-US",
             "page": page,
         }
-        if max_certification:
-            params["certification_country"] = "US"
-            params["certification.lte"] = max_certification
         data = await self._get("/discover/movie", params)
         return [m for m in data["results"] if not m.get("adult")]
 
-    async def keyword_id(self, word: str) -> int | None:
-        """First TMDB keyword matching a plain word, e.g. "superhero" -> 9715."""
-        data = await self._get("/search/keyword", {"query": " ".join(word.split())}, fresh_for=7 * DAY)
-        results = data.get("results") or []
-        return results[0]["id"] if results else None
-
-    async def search(self, title: str) -> list[dict]:
-        data = await self._get("/search/movie", {"query": title, "include_adult": "false", "language": "en-US"})
+    async def search(self, title: str, year: int | None = None) -> list[dict]:
+        """First page of /search/movie. With a year only films of that year come back."""
+        params = {"query": " ".join(title.split()), "include_adult": "false", "language": "en-US",
+                  "year": year if year else None}
+        data = await self._get("/search/movie", params)
         return [m for m in data["results"] if not m.get("adult")]
 
     async def movie(self, movie_id: int) -> dict:

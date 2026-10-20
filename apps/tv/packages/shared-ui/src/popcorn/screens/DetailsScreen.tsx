@@ -28,8 +28,6 @@ export interface DetailsScreenProps {
   onWereBack?: () => void;
   /** Back from the pills: tonight's picks. */
   onBack?: () => void;
-  /** "Already seen": watched by everyone on the couch, card removed, back to the reel. */
-  onSeen?: (movieId: number) => void;
 }
 
 const px = scaledPixels;
@@ -43,7 +41,6 @@ const SAFE_Y = px(consoleLayout.safeY);
 
 const KIND_LABEL: Record<Provider['kind'], string> = { stream: 'Included', rent: 'Rent', buy: 'Buy' };
 const WERE_BACK = '__back__';
-const SEEN = '__seen__';
 const INFO_BLOCKS = 5; // title, meta, chips, overview, credits
 
 const isUrl = (u: unknown): u is string => typeof u === 'string' && u.startsWith('http');
@@ -200,6 +197,18 @@ interface PillProps {
   focusRef: (node: SpatialNavigationNodeRef | null) => void;
 }
 
+/** Max provider pills: they share one row with Back, which must always stay on screen. */
+const MAX_PROVIDERS = 3;
+
+/**
+ * The providers worth a pill. "X Amazon Channel" / "X Apple TV Channel" resell a service
+ * (AMC+ three times over), so they go when the service itself or another provider is there.
+ */
+function watchOptions(all: Provider[]): Provider[] {
+  const direct = all.filter((p) => !/channel/i.test(p.name));
+  return (direct.length > 0 ? direct : all).slice(0, MAX_PROVIDERS);
+}
+
 function ProviderPill({ provider, onSelect, focusRef }: PillProps) {
   return (
     <SpatialNavigationFocusableView ref={focusRef} onSelect={onSelect}>
@@ -218,34 +227,25 @@ function ProviderPill({ provider, onSelect, focusRef }: PillProps) {
   );
 }
 
-function WereBackPill({ onSelect, focusRef }: { onSelect: () => void; focusRef: PillProps['focusRef'] }) {
+function TextPill({ label, onSelect, focusRef }: { label: string; onSelect: () => void; focusRef?: PillProps['focusRef'] }) {
   return (
     <SpatialNavigationFocusableView ref={focusRef} onSelect={onSelect}>
       {({ isFocused }) => (
         <View style={[styles.pill, styles.backPill, isFocused ? styles.pillFocused : null]}>
-          <Text style={[styles.pillName, isFocused ? styles.onLight : null]}>We’re back</Text>
+          <Text style={[styles.pillName, isFocused ? styles.onLight : null]}>{label}</Text>
         </View>
       )}
     </SpatialNavigationFocusableView>
   );
 }
 
-/** Quiet outline pill (white when focused) for "Already seen". */
-function SeenPill({ onSelect, focusRef }: { onSelect: () => void; focusRef: PillProps['focusRef'] }) {
-  return (
-    <SpatialNavigationFocusableView ref={focusRef} onSelect={onSelect}>
-      {({ isFocused }) => (
-        <View style={[styles.pill, styles.seenPill, isFocused ? styles.pillFocused : null]}>
-          <Text style={[styles.pillName, isFocused ? styles.onLight : null]}>Already seen</Text>
-        </View>
-      )}
-    </SpatialNavigationFocusableView>
-  );
+function WereBackPill({ onSelect, focusRef }: { onSelect: () => void; focusRef: PillProps['focusRef'] }) {
+  return <TextPill label="We’re back" onSelect={onSelect} focusRef={focusRef} />;
 }
 
 // ---------------------------------------------------------------------------------------------
 
-export default function DetailsScreen({ state, onWatch, onWereBack, onBack, onSeen }: DetailsScreenProps) {
+export default function DetailsScreen({ state, onWatch, onWereBack, onBack }: DetailsScreenProps) {
   const details = state.details;
   const watching = state.watching ?? null;
   const [hiddenKey, setHiddenKey] = useState<string | null>(null);
@@ -253,7 +253,7 @@ export default function DetailsScreen({ state, onWatch, onWereBack, onBack, onSe
   const nodeRefs = useRef<Record<string, SpatialNavigationNodeRef | null>>({});
   const lastProvider = useRef<string | null>(null);
 
-  const providers = details && Array.isArray(details.providers) ? details.providers.slice(0, 4) : [];
+  const providers = details && Array.isArray(details.providers) ? watchOptions(details.providers) : [];
   const key = watchKey(watching);
   const handoff = key !== null && key !== hiddenKey;
   const rise = useRise(details ? details.id : 0);
@@ -281,11 +281,12 @@ export default function DetailsScreen({ state, onWatch, onWereBack, onBack, onSe
     setFocusTarget(null);
   }, [focusTarget]);
 
-  useBackKey(() => {
+  const goBack = () => {
     if (handoff && key)
       setHiddenKey(key); // local only; shows again when `watching` changes
     else onBack?.();
-  });
+  };
+  useBackKey(goBack);
 
   const refFor = (id: string) => (node: SpatialNavigationNodeRef | null) => {
     nodeRefs.current[id] = node;
@@ -307,19 +308,10 @@ export default function DetailsScreen({ state, onWatch, onWereBack, onBack, onSe
     );
   }
 
-  const fromPicks = (Array.isArray(state.recommendations) ? state.recommendations : []).find(
-    (m) => m.id === details.id,
-  );
-  const match = typeof details.match === 'number' ? details.match : fromPicks ? fromPicks.match : undefined;
   const rating = typeof details.rating === 'number' && details.rating > 0 ? details.rating : null;
   const cast = Array.isArray(details.cast) ? details.cast.slice(0, 3) : [];
   const region = details.providers_region || 'US';
   const chosen = watching ? providers.find((p) => p.name === watching.provider) : undefined;
-  const seenPill = onSeen ? (
-    <View style={styles.pillGap}>
-      <SeenPill onSelect={() => onSeen(details.id)} focusRef={refFor(SEEN)} />
-    </View>
-  ) : null;
 
   const watch = () => {
     if (handoff && watching) {
@@ -332,11 +324,16 @@ export default function DetailsScreen({ state, onWatch, onWereBack, onBack, onSe
             </Text>
           </View>
           <Text style={styles.handoffSub}>Come back when it’s over</Text>
-          <View style={styles.pills}>
-            <DefaultFocus>
-              <WereBackPill onSelect={() => onWereBack?.()} focusRef={refFor(WERE_BACK)} />
-            </DefaultFocus>
-          </View>
+          <SpatialNavigationNode orientation="horizontal">
+            <View style={styles.pills}>
+              <DefaultFocus>
+                <WereBackPill onSelect={() => onWereBack?.()} focusRef={refFor(WERE_BACK)} />
+              </DefaultFocus>
+              <View style={styles.pillGap}>
+                <TextPill label="Back" onSelect={goBack} />
+              </View>
+            </View>
+          </SpatialNavigationNode>
         </View>
       );
     }
@@ -350,7 +347,9 @@ export default function DetailsScreen({ state, onWatch, onWereBack, onBack, onSe
               <DefaultFocus>
                 <WereBackPill onSelect={() => onWereBack?.()} focusRef={refFor(WERE_BACK)} />
               </DefaultFocus>
-              {seenPill}
+              <View style={styles.pillGap}>
+                <TextPill label="Back" onSelect={goBack} />
+              </View>
             </View>
           </SpatialNavigationNode>
         </View>
@@ -363,7 +362,7 @@ export default function DetailsScreen({ state, onWatch, onWereBack, onBack, onSe
           <View style={styles.pills}>
             {providers.map((p, i) => (
               <DefaultFocus key={`${p.id}-${p.name}`} enable={i === 0}>
-                <View style={i > 0 ? styles.pillGap : null}>
+                <View style={[styles.pillSlot, i > 0 ? styles.pillGap : null]}>
                   <ProviderPill
                     provider={p}
                     focusRef={refFor(`p${i}`)}
@@ -375,7 +374,9 @@ export default function DetailsScreen({ state, onWatch, onWereBack, onBack, onSe
                 </View>
               </DefaultFocus>
             ))}
-            {seenPill}
+            <View style={[styles.pillGap, styles.backSlot]}>
+              <TextPill label="Back" onSelect={goBack} />
+            </View>
           </View>
         </SpatialNavigationNode>
       </View>
@@ -402,11 +403,6 @@ export default function DetailsScreen({ state, onWatch, onWereBack, onBack, onSe
           {metaLine(details)}
         </Animated.Text>
         <Animated.View style={[styles.chips, rise(2)]}>
-          {typeof match === 'number' ? (
-            <View style={[styles.chip, styles.chipMatch]}>
-              <Text style={[styles.chipText, styles.onLight]}>{`${match}% match`}</Text>
-            </View>
-          ) : null}
           {rating !== null ? (
             <View style={styles.chip}>
               <Text style={styles.chipText}>{`TMDB ${rating.toFixed(1)}`}</Text>
@@ -440,7 +436,7 @@ export default function DetailsScreen({ state, onWatch, onWereBack, onBack, onSe
         <Text style={styles.footerText}>
           {handoff
             ? 'OK: we’re back · Back: where to watch'
-            : 'Left/Right: choose · OK: watch there or mark as seen · Back: tonight’s picks'}
+            : 'Left/Right: choose · OK: watch there · Back: tonight’s picks'}
         </Text>
         <Text style={styles.footerText}>Streaming data by JustWatch</Text>
       </View>
@@ -537,10 +533,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: px(14),
   },
-  chipMatch: {
-    backgroundColor: consoleColors.cta,
-    borderColor: consoleColors.cta,
-  },
   chipText: {
     color: consoleColors.text,
     fontSize: px(T.chip),
@@ -591,7 +583,16 @@ const styles = StyleSheet.create({
   pillGap: {
     marginLeft: px(D.pillGap),
   },
+  // Provider pills shrink (long names cut with "...") so Back always fits on the row.
+  pillSlot: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  backSlot: {
+    flexShrink: 0,
+  },
   pill: {
+    flexShrink: 1,
     height: PILL_H,
     borderRadius: PILL_H / 2,
     paddingHorizontal: px(D.pillPadding),
@@ -608,12 +609,6 @@ const styles = StyleSheet.create({
     shadowRadius: px(30),
     shadowOffset: { width: 0, height: px(16) },
     elevation: 10,
-  },
-  seenPill: {
-    paddingHorizontal: px(36),
-    backgroundColor: 'transparent',
-    borderWidth: px(2),
-    borderColor: consoleDetailsColors.chipOutline,
   },
   backPill: {
     paddingHorizontal: px(44),
@@ -639,6 +634,7 @@ const styles = StyleSheet.create({
     fontWeight: consoleType.weight.semibold,
   },
   pillName: {
+    flexShrink: 1,
     maxWidth: px(D.pillNameMax),
     color: consoleColors.text,
     fontSize: px(T.pillName),

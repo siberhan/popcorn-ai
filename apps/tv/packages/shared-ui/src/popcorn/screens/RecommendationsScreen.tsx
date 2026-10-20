@@ -36,10 +36,14 @@ export interface RecommendationsScreenProps {
   onOpen?: (movieId: number) => void;
   /** A film held focus for a second (voice hook). */
   onFilmSettled?: (movieId: number) => void;
-  /** Back on the reel, or OK on the couch avatars in the header: the couch screen. */
+  /** OK on the couch avatars in the header: the couch screen. */
   onOpenCouch?: () => void;
-  /** "New picks" pill in the header: ask the agent for a fresh set. */
+  /** Back key or the "Back" pill: the previous screen ("what do you feel like tonight?"). */
+  onBack?: () => void;
+  /** "New picks" pill in the header: ask for a fresh set without tonight's films. */
   onNewPicks?: () => void;
+  /** A picks call is in flight (this TV or another): the header and the empty state say so. */
+  picksLoading?: boolean;
   /** A speech item is playing or waiting; narration waits for it. */
   speaking?: boolean;
   /** URL of the narration clip playing now (bars on the focused film move while it plays). */
@@ -105,8 +109,7 @@ function metaLine(movie: MovieCard): string {
 }
 
 function ghostLine(movie: MovieCard): string {
-  const match = typeof movie.match === 'number' ? `${movie.match}% match` : '';
-  return [match, movie.year, (movie.genres || [])[0]].filter(Boolean).join(' · ');
+  return [movie.year, (movie.genres || [])[0]].filter(Boolean).join(' · ');
 }
 
 /** "PG kid-safe" -> "Picks stay PG". */
@@ -114,8 +117,6 @@ function kidRule(label: string | null): string | null {
   if (!label) return null;
   return `Picks stay ${label.split(' ')[0]}`;
 }
-
-const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 /** Dev log for the voice hook (a film held focus for a second). */
 function logSettled(movie: MovieCard) {
@@ -259,18 +260,11 @@ function ReelRow({ item, i, pos, fade, reelFocus, narrating }: ReelRowProps) {
         <Text style={styles.meta} numberOfLines={1}>
           {metaLine(movie)}
         </Text>
-        {typeof movie.match === 'number' || rating !== null ? (
+        {rating !== null ? (
           <View style={styles.chips}>
-            {typeof movie.match === 'number' ? (
-              <View style={styles.matchPill}>
-                <Text style={styles.matchText}>{`${movie.match}% match`}</Text>
-              </View>
-            ) : null}
-            {rating !== null ? (
-              <View style={styles.ratingPill}>
-                <Text style={styles.ratingText}>{`TMDB ${rating.toFixed(1)}`}</Text>
-              </View>
-            ) : null}
+            <View style={styles.ratingPill}>
+              <Text style={styles.ratingText}>{`TMDB ${rating.toFixed(1)}`}</Text>
+            </View>
           </View>
         ) : null}
         {why ? (
@@ -338,25 +332,40 @@ function HeaderFocusable({ onSelect, onFocus, children }: HeaderPillProps) {
   );
 }
 
+type HeaderSpot = 'back' | 'picks' | 'couch';
+
 interface HeaderRightProps {
   state: TVState;
   onOpenCouch?: () => void;
+  onBack?: () => void;
   onNewPicks?: () => void;
-  onFocus: (what: 'picks' | 'couch') => void;
+  picking: boolean;
+  onFocus: (what: HeaderSpot) => void;
 }
 
-/** Header right side: "New picks", then the couch discs and names (OK opens the couch screen), then the clock. */
-function HeaderRight({ state, onOpenCouch, onNewPicks, onFocus }: HeaderRightProps) {
+/** Header right side: "Back", "New picks", then the couch discs and names (OK opens the couch screen), then the clock. */
+function HeaderRight({ state, onOpenCouch, onBack, onNewPicks, picking, onFocus }: HeaderRightProps) {
   const clock = useClock();
   const order = householdOrder(state);
   const seated = (Array.isArray(state.members) ? state.members : []).filter((m) => m && m.name);
   return (
     <SpatialNavigationNode orientation="horizontal">
       <View style={styles.headerRight}>
-        <HeaderFocusable onSelect={onNewPicks} onFocus={() => onFocus('picks')}>
+        {onBack ? (
+          <HeaderFocusable onSelect={onBack} onFocus={() => onFocus('back')}>
+            {(focused) => (
+              <View style={[styles.headerPill, focused ? styles.headerPillFocused : null]}>
+                <Text style={[styles.headerPillText, focused ? styles.onLight : null]}>Back</Text>
+              </View>
+            )}
+          </HeaderFocusable>
+        ) : null}
+        <HeaderFocusable onSelect={picking ? undefined : onNewPicks} onFocus={() => onFocus('picks')}>
           {(focused) => (
-            <View style={[styles.headerPill, focused ? styles.headerPillFocused : null]}>
-              <Text style={[styles.headerPillText, focused ? styles.onLight : null]}>New picks</Text>
+            <View style={[styles.headerPill, focused ? styles.headerPillFocused : null, picking ? styles.headerPillQuiet : null]}>
+              <Text style={[styles.headerPillText, focused ? styles.onLight : null]}>
+                {picking ? 'Picking...' : 'New picks'}
+              </Text>
             </View>
           )}
         </HeaderFocusable>
@@ -387,20 +396,22 @@ interface HeaderProps {
   state: TVState;
   kidLabel: string | null;
   kept: number | null;
+  loading: boolean;
   right: React.ReactNode;
 }
 
-function Header({ state, kidLabel, kept, right }: HeaderProps) {
-  const boost = Array.isArray(state.boost) ? state.boost : [];
+function Header({ state, kidLabel, kept, loading, right }: HeaderProps) {
   const rule = kidRule(kidLabel);
-  const status = [state.message, kept !== null ? `Kept ${kept} kid-safe pick${kept === 1 ? '' : 's'}` : '']
-    .filter(Boolean)
-    .join(' · ');
+  const status = loading
+    ? 'Popcorn is picking new films...'
+    : [state.message, kept !== null ? `Kept ${kept} kid-safe pick${kept === 1 ? '' : 's'}` : '']
+        .filter(Boolean)
+        .join(' · ');
 
   return (
     <>
       <ConsoleHeader state={state} right={right} />
-      {status || rule || boost.length > 0 ? (
+      {status || rule ? (
         <View style={styles.subHeader}>
           {status ? (
             <Text style={styles.status} numberOfLines={1}>
@@ -408,11 +419,6 @@ function Header({ state, kidLabel, kept, right }: HeaderProps) {
             </Text>
           ) : null}
           {rule ? <Text style={styles.rule}>{rule}</Text> : null}
-          {boost.map((genre) => (
-            <View key={genre} style={styles.mood}>
-              <Text style={styles.moodText}>{capitalize(genre)}</Text>
-            </View>
-          ))}
         </View>
       ) : null}
     </>
@@ -426,7 +432,9 @@ export default function RecommendationsScreen({
   onOpen,
   onFilmSettled,
   onOpenCouch,
+  onBack,
   onNewPicks,
+  picksLoading,
   speaking,
   narrating,
   onNarrate,
@@ -444,7 +452,7 @@ export default function RecommendationsScreen({
 
   const pos = useRef(new Animated.Value(0)).current;
   const reelFocus = useRef(new Animated.Value(1)).current;
-  const [headerFocus, setHeaderFocus] = useState<'picks' | 'couch' | null>(null);
+  const [headerFocus, setHeaderFocus] = useState<HeaderSpot | null>(null);
   const fade = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef<Animated.CompositeAnimation | null>(null);
 
@@ -603,14 +611,14 @@ export default function RecommendationsScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the wait ends or speech stops
   }, [narrateKey, speaking]);
 
-  useBackKey(() => onOpenCouch?.());
+  useBackKey(() => (onBack ? onBack() : onOpenCouch?.()));
 
   const focusReel = (i: number) => {
     setHeaderFocus(null);
     Animated.timing(reelFocus, { toValue: 1, duration: 160, useNativeDriver: true }).start();
     moveTo(i);
   };
-  const focusHeader = (what: 'picks' | 'couch') => {
+  const focusHeader = (what: HeaderSpot) => {
     setHeaderFocus(what);
     Animated.timing(reelFocus, { toValue: 0, duration: 160, useNativeDriver: true }).start();
   };
@@ -629,13 +637,17 @@ export default function RecommendationsScreen({
   const multiple = items.length > 1;
 
   const hint =
-    headerFocus === 'couch'
+    headerFocus === 'back'
+      ? 'OK: change what you feel like \u00B7 Down: back to the films'
+      : headerFocus === 'couch'
       ? 'OK: change who\u2019s watching \u00B7 Down: back to the films'
       : headerFocus === 'picks'
-        ? 'OK: ask Popcorn for new picks \u00B7 Down: back to the films'
+        ? picksLoading
+          ? 'Picking new films... \u00B7 Down: back to the films'
+          : 'OK: ask Popcorn for new picks \u00B7 Down: back to the films'
         : items.length === 0
-          ? 'Up: new picks or the couch \u00B7 Back: couch'
-          : `${multiple ? 'Up/Down: change film \u00B7 ' : ''}OK: details \u00B7 Up from the top: couch \u00B7 Back: couch`;
+          ? 'Up: new picks or the couch \u00B7 Back: go back'
+          : `${multiple ? 'Up/Down: change film \u00B7 ' : ''}OK: details \u00B7 Up from the top: more \u00B7 Back: go back`;
 
   return (
     <View style={styles.screen}>
@@ -643,8 +655,12 @@ export default function RecommendationsScreen({
 
       {items.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No picks yet</Text>
-          <Text style={styles.emptySub}>Ask Popcorn AI to find movies for everyone on the couch.</Text>
+          <Text style={styles.emptyTitle}>{picksLoading ? 'Picking tonight’s films' : 'No picks yet'}</Text>
+          <Text style={styles.emptySub}>
+            {picksLoading
+              ? 'Popcorn is asking for a fresh set. This takes a moment.'
+              : 'Go back to the couch and press Popcorn.'}
+          </Text>
         </View>
       ) : (
         <>
@@ -673,8 +689,16 @@ export default function RecommendationsScreen({
             state={state}
             kidLabel={kidLabel}
             kept={kept}
+            loading={Boolean(picksLoading)}
             right={
-              <HeaderRight state={state} onOpenCouch={onOpenCouch} onNewPicks={onNewPicks} onFocus={focusHeader} />
+              <HeaderRight
+                state={state}
+                onOpenCouch={onOpenCouch}
+                onBack={onBack}
+                onNewPicks={onNewPicks}
+                picking={Boolean(picksLoading)}
+                onFocus={focusHeader}
+              />
             }
           />
           {items.length > 0 ? (
@@ -738,6 +762,9 @@ const styles = StyleSheet.create({
     borderColor: consoleReelColors.pillOutline,
     justifyContent: 'center',
     marginRight: px(16),
+  },
+  headerPillQuiet: {
+    opacity: 0.55,
   },
   headerPillFocused: {
     backgroundColor: consoleColors.cta,
@@ -813,20 +840,6 @@ const styles = StyleSheet.create({
   rule: {
     marginLeft: px(24),
     color: consoleColors.secondary,
-    fontSize: px(T.small),
-    fontWeight: consoleType.weight.medium,
-  },
-  mood: {
-    marginLeft: px(12),
-    height: px(R.chipHeight),
-    paddingHorizontal: px(16),
-    borderRadius: px(R.chipHeight / 2),
-    borderWidth: px(2),
-    borderColor: consoleReelColors.pillOutline,
-    justifyContent: 'center',
-  },
-  moodText: {
-    color: consoleColors.text,
     fontSize: px(T.small),
     fontWeight: consoleType.weight.medium,
   },
@@ -951,19 +964,6 @@ const styles = StyleSheet.create({
     marginTop: px(26),
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  matchPill: {
-    height: px(R.pillHeight),
-    paddingHorizontal: px(22),
-    borderRadius: px(R.pillHeight / 2),
-    backgroundColor: consoleColors.cta,
-    justifyContent: 'center',
-    marginRight: px(16),
-  },
-  matchText: {
-    color: consoleColors.onLight,
-    fontSize: px(T.count),
-    fontWeight: consoleType.weight.semibold,
   },
   ratingPill: {
     height: px(R.pillHeight),

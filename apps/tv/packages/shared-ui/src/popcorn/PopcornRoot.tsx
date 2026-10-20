@@ -3,9 +3,12 @@ import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { SpatialNavigationRoot } from 'react-tv-space-navigation';
 import { useTVState } from './useTVState';
 import {
-  pickDuel,
   addToCouch,
   removeFromCouch,
+  recommend,
+  openAsk,
+  askTonight,
+  saveGenres,
   openDetails,
   goTo,
   settleFocus,
@@ -14,22 +17,23 @@ import {
   rateByHand,
   skipTurn,
   finishRating,
-  markSeen,
-  newSession,
-  sendEvent,
-  AgentEvent,
+  editPerson,
+  deletePerson,
 } from './api';
 import { useSpeech } from './speech/useSpeech';
-import { VoiceBar } from './components';
+import { ConsoleBackdrop, VoiceBar } from './components';
 import { Reaction } from './types';
 import CouchScreen from './screens/CouchScreen';
-import DuelScreen from './screens/DuelScreen';
+import GenresScreen, { preloadGenres } from './screens/GenresScreen';
+import AskScreen from './screens/AskScreen';
+import FavoritesScreen from './screens/FavoritesScreen';
 import RecommendationsScreen from './screens/RecommendationsScreen';
 import DetailsScreen from './screens/DetailsScreen';
 import RatingScreen from './screens/RatingScreen';
 import OfflineBanner from '../components/OfflineBanner';
 import Toast from '../components/Toast';
-import { colors, typography, spacing } from '../theme';
+import { scaledPixels } from '../hooks/useScale';
+import { consoleColors, consoleType } from '../theme/console';
 import '../app/configureRemoteControl';
 
 const SpatialNavRoot = SpatialNavigationRoot as React.ComponentType<{
@@ -38,92 +42,165 @@ const SpatialNavRoot = SpatialNavigationRoot as React.ComponentType<{
   onDirectionHandledWithoutMovement?: any;
 }>;
 
-// One fresh agent conversation per app start (module level, so a remount does not start another).
-let sessionStarted = false;
+/** Same rule as the server's `slug()`: collapse spaces, ignore case. */
+const slug = (name: string) => (name || '').split(/\s+/).filter(Boolean).join(' ').toLowerCase();
 
 export function PopcornRoot() {
-  const { state, online } = useTVState();
+  const { state, online, refresh } = useTVState();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [waiting, setWaiting] = useState(0); // agent events in flight: the voice bar shows "Thinking..."
+  const [picking, setPicking] = useState(false); // a recommend call is in flight
   const speech = useSpeech(state ? state.speech : undefined);
+  // A new profile shows its genres screen before the server answers (see handleAddMember).
+  const [pendingGenresFor, setPendingGenresFor] = useState<string | null>(null);
+  const addingRef = useRef<Promise<unknown> | null>(null);
 
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  useEffect(() => {
+    preloadGenres();
+  }, []);
+
+  // The server's own genres screen (or any other screen change) takes over from the local one.
+  const serverScreen = state ? state.screen : null;
+  const serverVersion = state ? state.version : null;
+  const pendingVersion = useRef<number | null>(null);
+  useEffect(() => {
+    if (!pendingGenresFor) {
+      pendingVersion.current = null;
+      return;
+    }
+    if (pendingVersion.current === null) {
+      pendingVersion.current = serverVersion;
+    } else if (serverVersion !== pendingVersion.current) {
+      setPendingGenresFor(null);
+    }
+  }, [pendingGenresFor, serverScreen, serverVersion]);
 
   const showError = useCallback((msg: string) => {
     setToastMessage(msg);
   }, []);
 
-  useEffect(() => {
-    if (sessionStarted) return;
-    sessionStarted = true;
-    newSession().catch((err: any) => {
-      if (__DEV__) console.log(`[agent] session/new failed: ${err?.message || err}`);
-    });
-  }, []);
-
-  /** Tell the agent about a TV event. The agent's reply arrives as `speech` in the state. */
-  const runEvent = useCallback(
-    async (event: AgentEvent, name?: string, skipped?: boolean, failText?: string) => {
-      setWaiting((n) => n + 1);
-      try {
-        await sendEvent(event, name, skipped);
-      } catch (err: any) {
-        if (failText) showError(err?.message ? `${failText}: ${err.message}` : failText);
-      } finally {
-        setWaiting((n) => Math.max(0, n - 1));
-      }
-    },
-    [showError]
-  );
-
-  const handlePickDuel = useCallback(
-    async (side: 'left' | 'right' | 'skip') => {
-      const name = stateRef.current?.duel?.name;
-      let res: any;
-      try {
-        res = await pickDuel(side);
-      } catch (err: any) {
-        showError(err?.message || (side === 'skip' ? 'Failed to skip the duel' : 'Failed to record duel choice'));
-        return;
-      }
-      if (res && res.done && name) {
-        // Fire and forget: the agent writes taste notes and speaks next.
-        runEvent('duel_done', name, side === 'skip');
-      }
-    },
-    [showError, runEvent]
-  );
-
   const handleRemoveMember = useCallback(
     async (name: string) => {
       try {
         await removeFromCouch(name);
+        refresh();
         return true;
       } catch (err: any) {
         showError(err?.message || 'Failed to remove member from couch');
         return false;
       }
     },
-    [showError]
+    [refresh, showError]
   );
 
   const handleAddMember = useCallback(
     async (name: string, age?: number) => {
+      // A new name goes to the genres screen at once; the server confirms it with the next poll.
+      const roster = state && Array.isArray(state.household) ? state.household : [];
+      const isNew = !roster.some((m) => slug(m.name) === slug(name));
+      const adding = addToCouch(name, age);
+      if (isNew) {
+        addingRef.current = adding;
+        setPendingGenresFor(name.split(/\s+/).filter(Boolean).join(' '));
+      }
       try {
-        await addToCouch(name, age);
-        return true;
+        await adding;
       } catch (err: any) {
+        if (isNew) setPendingGenresFor(null);
         showError(err?.message || 'Failed to add member to couch');
         return false;
       }
+      refresh();
+      return true;
     },
-    [showError]
+    [state, refresh, showError]
   );
 
-  const handleShowPicks = useCallback(() => {
-    runEvent('show_picks', undefined, undefined, 'Popcorn could not get picks');
-  }, [runEvent]);
+  const handleEditMember = useCallback(
+    async (name: string, newName: string, age: number | null) => {
+      try {
+        await editPerson(name, { name: newName, age });
+        refresh();
+        return true;
+      } catch (err: any) {
+        showError(err?.message || 'Failed to save the changes');
+        return false;
+      }
+    },
+    [refresh, showError]
+  );
+
+  const handleSaveGenres = useCallback(
+    async (name: string, genres: string[]) => {
+      try {
+        await addingRef.current?.catch(() => {}); // the profile must exist before its genres are saved
+        await saveGenres(name, genres);
+        refresh();
+        return true;
+      } catch (err: any) {
+        showError(err?.message || 'Failed to save the genres');
+        return false;
+      }
+    },
+    [refresh, showError]
+  );
+
+  const handleDeleteMember = useCallback(
+    async (name: string) => {
+      try {
+        await deletePerson(name);
+        refresh();
+        return true;
+      } catch (err: any) {
+        showError(err?.message || 'Failed to delete the profile');
+        return false;
+      }
+    },
+    [refresh, showError]
+  );
+
+  /** Skip on the ask screen (request = "") and "New picks" on the reel (more = true, tonight's wish kept). */
+  const handleShowPicks = useCallback(
+    async (more: boolean, request?: string) => {
+      if (picking) return;
+      setPicking(true);
+      try {
+        await recommend(more, request);
+        refresh(); // the server moved to the new list; show it now, not on the next poll
+      } catch (err: any) {
+        showError(err?.message || (more ? 'Popcorn could not find new picks' : 'Popcorn could not get picks'));
+      } finally {
+        setPicking(false);
+      }
+    },
+    [picking, refresh, showError]
+  );
+
+  /** Popcorn on the couch: "what do you feel like tonight?" (or an unfinished genres/favorites first). */
+  const handleOpenAsk = useCallback(async () => {
+    try {
+      await openAsk();
+      refresh();
+    } catch (err: any) {
+      showError(err?.message || 'Popcorn could not start');
+    }
+  }, [refresh, showError]);
+
+  /** A typed wish: the server checks it, then shows the picks or a "sorry" line on the ask screen. */
+  const handleAsk = useCallback(
+    async (text: string) => {
+      if (picking) return;
+      setPicking(true);
+      try {
+        await askTonight(text);
+        refresh();
+      } catch (err: any) {
+        showError(err?.message || 'Popcorn could not get picks');
+      } finally {
+        setPicking(false);
+      }
+    },
+    [picking, refresh, showError]
+  );
 
   /** Run a request; toast its error text (or `fallback`). */
   const run = useCallback(
@@ -142,7 +219,7 @@ export function PopcornRoot() {
     [run]
   );
 
-  // Fire and forget: the voice page reads `focus`; errors are ignored.
+  // Fire and forget: `focus` records the film the reel settled on.
   const handleFilmSettled = useCallback((movieId: number) => {
     settleFocus(movieId).catch(() => {});
   }, []);
@@ -168,17 +245,15 @@ export function PopcornRoot() {
   const handleSkip = useCallback(() => run(() => skipTurn(), 'Failed to skip'), [run]);
   const handleFinish = useCallback(() => run(() => finishRating(), 'Failed to save the ratings'), [run]);
   const handleDone = useCallback(() => run(() => goTo('couch'), 'Failed to go back to the couch'), [run]);
-  const handleSeen = useCallback(
-    (movieId: number) => run(() => markSeen(movieId), 'Failed to mark the film as seen'),
-    [run]
-  );
+  const handleBackToAsk = useCallback(() => run(() => goTo('ask'), 'Failed to go back'), [run]);
 
   if (!state) {
     return (
       <View style={styles.container}>
+        <ConsoleBackdrop tint={consoleColors.fieldTeal} />
         {!online && <OfflineBanner />}
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.accent.popcorn} />
+          <ActivityIndicator size="large" color={consoleColors.text} />
           <Text style={styles.connectingText}>Connecting to Popcorn AI...</Text>
         </View>
         {toastMessage && (
@@ -188,23 +263,59 @@ export function PopcornRoot() {
     );
   }
 
+  const picksLoading = picking || Boolean(state.picks_loading);
+
   let screenNode: React.ReactNode = null;
-  switch (state.screen) {
+  switch (pendingGenresFor ? 'genres' : state.screen) {
     case 'couch':
       screenNode = (
         <CouchScreen
           state={state}
           onAddMember={handleAddMember}
           onRemoveMember={handleRemoveMember}
-          onShowPicks={handleShowPicks}
+          onEditMember={handleEditMember}
+          onDeleteMember={handleDeleteMember}
+          onSaveGenres={handleSaveGenres}
+          onShowPicks={handleOpenAsk}
+          picksLoading={picksLoading}
         />
       );
       break;
-    case 'duel':
+    case 'genres': {
+      // A new person picks their genres here; 1+ is required. Back goes to the couch and Popcorn
+      // brings them back here before any picks.
+      const who = pendingGenresFor || state.genres_for || '';
+      const roster = Array.isArray(state.household) ? state.household : state.members || [];
+      const member = roster.find((m) => slug(m.name) === slug(who));
       screenNode = (
-        <DuelScreen
+        <GenresScreen
           state={state}
-          onPick={handlePickDuel}
+          name={who}
+          selected={member && Array.isArray(member.genres) ? member.genres : []}
+          onSave={(genres) => handleSaveGenres(who, genres)}
+          onBack={handleDone}
+        />
+      );
+      break;
+    }
+    case 'favorites':
+      screenNode = (
+        <FavoritesScreen
+          state={state}
+          onBack={handleDone}
+          showError={showError}
+          refresh={refresh}
+        />
+      );
+      break;
+    case 'ask':
+      screenNode = (
+        <AskScreen
+          state={state}
+          onAsk={handleAsk}
+          onSkip={() => handleShowPicks(false, '')}
+          onBack={handleDone}
+          busy={picksLoading}
         />
       );
       break;
@@ -215,7 +326,9 @@ export function PopcornRoot() {
           onOpen={handleOpen}
           onFilmSettled={handleFilmSettled}
           onOpenCouch={handleDone}
-          onNewPicks={handleShowPicks}
+          onBack={handleBackToAsk}
+          onNewPicks={() => handleShowPicks(true)}
+          picksLoading={picksLoading}
           speaking={speech.speaking}
           narrating={speech.narrating}
           onNarrate={speech.narrate}
@@ -230,7 +343,6 @@ export function PopcornRoot() {
           onWatch={handleWatch}
           onWereBack={handleWereBack}
           onBack={handleBackToPicks}
-          onSeen={handleSeen}
         />
       );
       break;
@@ -251,7 +363,11 @@ export function PopcornRoot() {
           state={state}
           onAddMember={handleAddMember}
           onRemoveMember={handleRemoveMember}
-          onShowPicks={handleShowPicks}
+          onEditMember={handleEditMember}
+          onDeleteMember={handleDeleteMember}
+          onSaveGenres={handleSaveGenres}
+          onShowPicks={handleOpenAsk}
+          picksLoading={picksLoading}
         />
       );
   }
@@ -264,7 +380,6 @@ export function PopcornRoot() {
         <VoiceBar
           voice={state.voice}
           caption={speech.caption}
-          waiting={waiting > 0}
           hideListening={state.screen === 'rating' && Boolean(state.rating && state.rating.asking)}
         />
         {toastMessage && (
@@ -280,7 +395,7 @@ export default PopcornRoot;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bg.canvas,
+    backgroundColor: consoleColors.ground,
   },
   centerContainer: {
     flex: 1,
@@ -288,8 +403,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   connectingText: {
-    color: colors.text.secondary,
-    fontSize: typography.fontSize.lg,
-    marginTop: spacing[4],
+    color: consoleColors.secondary,
+    fontSize: scaledPixels(consoleType.secondary),
+    fontWeight: consoleType.weight.medium,
+    marginTop: scaledPixels(24),
   },
 });

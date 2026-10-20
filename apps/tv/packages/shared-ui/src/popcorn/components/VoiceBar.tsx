@@ -20,8 +20,6 @@ export interface VoiceBarProps {
   voice?: Voice | null;
   /** Text of the speech item playing now. */
   caption: string | null;
-  /** The TV itself is waiting on the agent (an event it sent). */
-  waiting?: boolean;
   /** The screen shows the live words itself (rating): skip the listening view. */
   hideListening?: boolean;
 }
@@ -87,10 +85,10 @@ function ThinkingDots() {
 
 /**
  * Bottom strip on every screen: the caption while the TV speaks, "Listening..." with moving bars
- * and the live words while the phone hears someone, "Thinking..." with dots while the agent works.
- * Hidden when the microphone is idle and nothing plays.
+ * and the live words while the phone hears a rating, "Thinking..." with dots while the server
+ * works on what was said. Hidden when the microphone is idle and nothing plays.
  */
-export default function VoiceBar({ voice, caption, waiting, hideListening }: VoiceBarProps) {
+export default function VoiceBar({ voice, caption, hideListening }: VoiceBarProps) {
   // Local staleness: the phone may vanish mid-sentence. Uses the TV clock only (no server time).
   const key = voice ? `${voice.state}|${voice.at}|${voice.text}` : '';
   const [stale, setStale] = useState(false);
@@ -106,7 +104,7 @@ export default function VoiceBar({ voice, caption, waiting, hideListening }: Voi
   const state = voice && !stale ? voice.state : 'idle';
   let mode: Mode = null;
   if (state === 'listening' && !hideListening) mode = 'listening';
-  else if (state === 'thinking' || waiting) mode = 'thinking';
+  else if (state === 'thinking') mode = 'thinking';
   else if (caption) mode = 'speaking';
 
   const fade = useRef(new Animated.Value(0)).current;

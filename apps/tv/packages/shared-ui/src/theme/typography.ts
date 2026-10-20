@@ -1,4 +1,4 @@
-// Mapped from apps/alexa-web/design/tokens.json (font sizes x1.5 for 10-foot)
+// Mapped from the v1 design tokens (font sizes x1.5 for 10-foot)
 
 export const typography = {
   fontFamily: {

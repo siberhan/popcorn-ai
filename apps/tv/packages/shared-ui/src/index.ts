@@ -4,8 +4,19 @@ export { default as PopcornRoot } from './popcorn/PopcornRoot';
 // State hook & API actions
 export { useTVState } from './popcorn/useTVState';
 export type { UseTVStateResult } from './popcorn/useTVState';
-export { pickDuel, addToCouch, removeFromCouch, newSession, sendEvent } from './popcorn/api';
-export { API_BASE_URL, AGENT_URL } from './popcorn/config';
+export {
+  getFavoritesCatalog,
+  startFavorites,
+  toggleFavorite,
+  searchFavorites,
+  doneFavorites,
+  addToCouch,
+  removeFromCouch,
+  getGenres,
+  saveGenres,
+  recommend,
+} from './popcorn/api';
+export { API_BASE_URL } from './popcorn/config';
 
 // Contract Types
 export * from './popcorn/types';

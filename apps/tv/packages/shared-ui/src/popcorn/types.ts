@@ -1,19 +1,48 @@
-export type Screen = 'couch' | 'duel' | 'recommendations' | 'details' | 'rating';
+export type Screen = 'couch' | 'genres' | 'favorites' | 'ask' | 'recommendations' | 'details' | 'rating';
+
+export type Reaction = 'loved' | 'liked' | 'meh' | 'disliked' | 'hated';
+
+/** One TMDB movie genre (`GET /api/genres`), "TV Movie" excluded. */
+export interface Genre {
+  id: number;
+  name: string; // "Science Fiction"
+}
+
+/** One film a person rated. A new review for the same film replaces the old one (moved to the end). */
+export interface Review {
+  title: string;
+  year: string; // "2020" or ""
+  reaction: Reaction;
+  summary: string; // their opinion in one line (the LLM summary for a spoken answer)
+}
 
 export interface Member {
   name: string;
   age: number | null;
-  kid: boolean;
-  loves: string[];
-  likes: string[];
-  dislikes: string[];
-  never: string[];
-  watched: string[];
-  notes: string[];
-  new: boolean; // no taste memory yet
-  role?: string | null; // "dad", "older son"; null if unknown (v2)
-  gender?: 'male' | 'female' | null; // (v2)
-  named?: boolean; // false when `name` is a label such as "Ahmet's son" (v2)
+  kid: boolean; // age < 13, computed by the server
+  genres: string[]; // exact TMDB genre names, chosen by the person
+  favorites: string[]; // "Inception (2010)", all of them
+  favorites_done: boolean;
+  reviews: Review[]; // last 10, newest last
+  new: boolean; // genres empty or favorites not done: the TV must finish genres/favorites first
+}
+
+export interface FavCard {
+  id: number;
+  title: string;
+  year: string;
+  poster: string;
+  rating: number;
+  genres: string[];
+}
+
+export interface FavoritesState {
+  name: string; // whose page it is
+  picked: FavCard[]; // pick order
+  query: string; // "" = no search
+  results: FavCard[]; // search results for `query` (max 20), [] when no search
+  min: 5;
+  max: 25;
 }
 
 export interface MovieCard {
@@ -25,18 +54,8 @@ export interface MovieCard {
   rating: number; // TMDB vote average, 0-10
   overview: string;
   poster: string | null; // TMDB w342 URL, load at runtime, never save
-  match?: number; // 40-99, recommendations only
-  why?: string; // "Bedirhan loves science fiction · Ayse loves comedy"
-  why_audio?: string | null; // "/api/voice/<sha1>.mp3", recommendations only (v2)
-}
-
-export interface Duel {
-  name: string; // whose duel
-  round: number; // 0-based, rounds already done
-  total: number;
-  pair: [MovieCard, MovieCard] | []; // left, right
-  profile: string;
-  shown: number[]; // internal, ignore
+  why?: string; // one spoiler-free sentence on why this group will enjoy it
+  why_audio?: string | null; // "/api/voice/<sha1>.mp3", recommendations only
 }
 
 export interface Details extends MovieCard {
@@ -66,11 +85,9 @@ export interface Watching {
   started_at: number; // unix seconds
 }
 
-export type Reaction = 'loved' | 'liked' | 'meh' | 'disliked' | 'hated';
-
 export interface RatingAnswer {
   reaction: Reaction | null; // null when skipped
-  quote: string; // what they said, "" for hand ratings and skips
+  quote: string; // the LLM summary of a spoken answer, "" for button answers and skips
   skipped: boolean;
   by: 'voice' | 'hand' | 'skip';
 }
@@ -91,12 +108,19 @@ export interface Speech {
   audio: string | null; // "/api/voice/<sha1>.mp3"; null if Polly failed
 }
 
-/** What the phone microphone is doing right now. */
+/** What the phone microphone is doing right now (the rating is the only voice input). */
 export interface Voice {
   state: 'idle' | 'listening' | 'thinking';
   text: string; // live words while listening, the final text while thinking
   speaker: string | null;
   at: number;
+}
+
+/** A film shown this evening; "New picks" asks the server not to suggest these again. */
+export interface ShownTitle {
+  id: number;
+  title: string;
+  year: string;
 }
 
 export interface TVState {
@@ -106,13 +130,17 @@ export interface TVState {
   household: Member[]; // every known person, on the couch or not, in the order they were added
   screen: Screen;
   message: string; // short status line, e.g. "Saved: Inception"
-  recommendations: MovieCard[];
-  boost: string[]; // tonight's mood genres
-  duel: Duel | null;
+  recommendations: MovieCard[]; // 10
+  genres_for: string | null; // whose genres are being picked on screen 'genres'
+  picks_loading: boolean; // true while a recommend call runs
+  shown_tonight: ShownTitle[]; // reset by a couch change
+  request: string; // what they feel like tonight, "" when skipped; reset by a couch change
+  ask_reply: string; // the "sorry" line on screen 'ask' after a wish the picks cannot use, else ""
+  favorites: FavoritesState | null;
   details: Details | null;
   watching: Watching | null; // set while the family is away watching; shown on the details screen
   rating: Rating | null; // set on screen 'rating'
-  focus: { movie_id: number; at: number } | null; // film the reel settled on (voice page reads it)
-  speech?: Speech[]; // last 6, ids go up (v2; missing on older servers)
-  voice?: Voice; // (v2; missing on older servers)
+  focus: { movie_id: number; at: number } | null; // film the reel settled on
+  speech?: Speech[]; // last 6, ids go up
+  voice?: Voice;
 }

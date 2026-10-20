@@ -4,9 +4,6 @@ export type { CouchBarProps } from './CouchBar';
 export { default as PosterCard } from './PosterCard';
 export type { PosterCardProps } from './PosterCard';
 
-export { default as MatchPill } from './MatchPill';
-export type { MatchPillProps } from './MatchPill';
-
 export { default as KidBadge } from './KidBadge';
 export type { KidBadgeProps } from './KidBadge';
 
@@ -27,6 +24,10 @@ export type { ProfileAvatarProps, AddProfileTileProps } from './ProfileAvatar';
 
 export { default as AddMemberForm } from './AddMemberForm';
 export type { AddMemberFormProps } from './AddMemberForm';
+export { formIsTyping, FormButton, FormTextField } from './AddMemberForm';
+
+export { default as ConfirmDelete } from './ConfirmDelete';
+export type { ConfirmDeleteProps } from './ConfirmDelete';
 
 export { default as PopcornButton, PopcornMark } from './PopcornButton';
 export type { PopcornMarkProps } from './PopcornButton';

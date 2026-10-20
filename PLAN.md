@@ -10,46 +10,43 @@ Tracks: Fire TV + Alexa+ (one project, both tracks; can win only one). Mini chal
 |---|---|
 | Fire TV | Vega OS app on Vega Virtual Device (VVD). Develop in browser (web target), demo on VVD. |
 | Starter | `AmazonAppDev/react-native-multi-tv-app-sample` (one codebase: web + Vega) |
-| Alexa+ | Self-hosted MCP server (spec 2025-11-25, Streamable HTTP) + separate "Alexa simulator" web page |
-| Voice | Browser Web Speech API (speech-to-text) + Amazon Polly (text-to-speech) |
-| LLM | OpenRouter only (OpenAI-compatible) |
+| Alexa+ | Self-hosted MCP server (spec 2025-11-25, Streamable HTTP). The v2 "Alexa simulator" page and the Strands agent were removed in v3 |
+| Voice | Phone page (QR on the TV) only: OpenRouter Whisper (speech-to-text) + OpenRouter TTS |
+| LLM | OpenRouter only: `openai/gpt-oss-120b:nitro` on Cerebras, one call for 10 picks |
 | Backend language | Python |
-| AWS services | Strands Agents SDK, Lambda, DynamoDB, Polly |
+| AWS services | Lambda (Function URL), DynamoDB |
 | Scope | Focused: one strong flow |
-| Who is on the couch | Voice ("me and Ayşe tonight") + TV couch confirms; D-pad can add/remove people |
-| Cold start | Poster duel on TV (5–6 rounds, D-pad) + voice statements ("I hate horror") |
+| Who is on the couch | Picked with the remote on the TV couch; a new person is name + age |
+| Cold start | Genre pick + 5-round poster duel from a stored per-genre catalog (both cannot be skipped) |
 | Hosting | Must stay live until 2026-11-20 (end of judging). Judges must not need their own keys. |
 
-## Demo Flow (the one strong flow)
+## Demo Flow (v3)
 
-1. "Alexa, it's me and Ayşe tonight" → avatars sit on the TV couch.
-2. Ayşe is new → poster duel on TV, plus a voice statement → her taste memory is saved.
-3. "Suggest a movie for us" → TV shows posters with match % and a "why" line for each.
-4. "Can joined us" → child sits on the couch → kid-unsafe movies disappear live.
-5. "We watched it, Ayşe loved it" → memory updates; next session remembers.
+1. Pick who is on the couch with the remote. A new person: name + age, then genres, then the poster duel.
+2. Popcorn → "What do you feel like watching tonight?" (typed or said on the phone; skip allowed).
+   Films from the last two years or in cinemas get a fixed "Sorry, I can't help with that." line.
+3. One LLM call → 10 picks with a "why" line each. A child on the couch keeps only kid-safe films.
+4. After watching, each person rates the film (5 buttons or voice on the phone). Reviews feed the next picks.
+
+Every screen but the couch has a Back button. The binding spec is `briefs/v3-contract.md`.
 
 ## Architecture
 
 ```
-[Alexa web page]  --voice text-->  [Agent: Strands + OpenRouter]  --MCP (Streamable HTTP)-->  [MCP server]
-   Web Speech STT                     Lambda                                                    Lambda
-   Polly audio  <--------------------                                                           |
-                                                                                                v
-[TV app on VVD]  --poll session state (HTTP)------------------------------------------->  [DynamoDB]
-   D-pad: couch edit, poster duel  ---------------------------------------------------->     + TMDB API
+[Phone page /phone/ (QR)]  --voice-->  [MCP server: Lambda + Function URL]  --> [DynamoDB]
+                                         MCP tools + HTTP API for the TV         + TMDB API
+[TV app on Vega]  --poll /api/state + remote actions (HTTP)-->                   + OpenRouter
 ```
 
-MCP tools (draft): `set_couch`, `add_to_couch`, `remove_from_couch`, `get_profiles`, `update_taste`,
+MCP tools (v1 draft, see the v3 contract for today's): `set_couch`, `add_to_couch`, `remove_from_couch`, `get_profiles`, `update_taste`,
 `record_duel_choice`, `recommend_for_couch` (taste intersection + age filter), `mark_watched`, `get_movie_details`.
 
 ## Repo Layout (draft)
 
 ```
 apps/tv/            React Native multi-TV app (web + Vega)
-apps/alexa-web/     Alexa simulator page (static)
-services/mcp/       Python MCP server
-services/agent/     Python Strands agent + Polly
-infra/              Lambda + DynamoDB deploy (SAM or CDK)
+services/mcp/       Python MCP server, HTTP API for the TV, phone page
+infra/              deploy.py (boto3): Lambda + Function URL, duel catalog seed
 FRICTION_LOG.md     Kept from day 1 (up to 10% bonus)
 README.md, LICENSE
 ```

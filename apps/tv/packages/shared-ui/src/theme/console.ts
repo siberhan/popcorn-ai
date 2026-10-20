@@ -1,5 +1,5 @@
-// Tokens for the console-style couch and recommendations screens and their components.
-// The duel and details screens still use colors.ts / typography.ts.
+// Tokens for the console-style couch, favorites, and recommendations screens and their components.
+// The details screen still uses colors.ts / typography.ts.
 
 export const consoleColors = {
   ground: '#0B0D12',
@@ -53,7 +53,7 @@ export const consoleType = {
 export const consoleLayout = {
   safeX: 96,
   safeY: 54,
-  titleTop: 250,
+  titleTop: 170,
   rowTop: 390,
   disc: 180,
   discGap: 44,
@@ -216,53 +216,46 @@ export const consoleDetailsMotion = {
   staggerMs: 80,
 };
 
-/** Family rating: one person in the spotlight, everyone else waiting in the row below. */
+/** Family rating: the film above, one person in the spotlight, five written answers, the QR aside. */
 export const consoleRating = {
-  centerTop: 180,
-  disc: 200,
+  filmTop: 70,
+  posterWidth: 120,
+  posterHeight: 180,
+  posterRadius: 10,
+  titleGap: 26,
+  centerTop: 280,
+  disc: 140,
   discGap: 8,
-  discRing: 6,
-  questionGap: 44,
-  transcriptWidth: 1200,
-  transcriptLines: 3,
+  discRing: 5,
+  quoteGap: 24,
+  quoteWidth: 1100,
+  quoteLines: 2,
   barsHeight: 50,
   barWidth: 8,
   barGap: 8,
-  bars: [16, 40, 28, 46, 20, 12], // peak heights while listening
+  bars: [16, 40, 28, 46, 20, 12], // peak heights while they talk on the phone
   barIdle: 8,
-  pillHeight: 60,
+  pillHeight: 76,
   pillGap: 20,
-  handPillHeight: 72,
-  progressBottom: 110,
-  smallDisc: 44,
-  smallGap: 3,
-  smallRing: 3,
-  chipHeight: 34,
-  laterOpacity: 0.45,
+  pillPadding: 30,
+  skipGap: 20,
+  qrTop: 340,
   hintBottom: 50,
-  thumbWidth: 44,
-  thumbHeight: 66,
-  thumbRadius: 6,
-  savedDisc: 112,
   fieldOpacity: 0.75,
   focusScale: 1.06,
+  quietOpacity: 0.4,
 };
 
 export const consoleRatingType = {
-  initials: 70,
-  question: 30,
-  transcript: 52,
-  transcriptLine: 65,
-  pill: 24,
-  handPill: 26,
-  smallInitials: 18,
-  chip: 20,
-  count: 24,
+  initials: 52,
+  filmTitle: 46,
+  question: 38,
+  quote: 48,
+  quoteLine: 62,
+  quoteSpoken: 34,
+  pill: 28,
   hint: 22,
-  header: 24,
-  savedTitle: 40,
-  savedName: 24,
-  savedInitials: 40,
+  status: 40,
 };
 
 export const consoleRatingColors = {
@@ -271,9 +264,6 @@ export const consoleRatingColors = {
 
 export const consoleRatingMotion = {
   liveMs: 1200, // bars move while `live` changed this recently
-  handoffMs: 500,
-  handoffSettleMs: 40, // let the progress row lay out before the discs fly
-  savedMs: 400,
   barMs: [210, 260, 190, 240, 280, 200],
 };
 
@@ -314,17 +304,56 @@ export const consoleVoiceMotion = {
   dotMs: 420,
 };
 
-/** The phone QR on the couch screen: large on first run, small once people exist. */
+/** The phone QR on the rating screen: one code and the one line under it. */
 export const consoleQr = {
-  large: 360,
-  small: 132,
+  rating: 300,
   pad: 16, // white frame around the code (on top of its own quiet zone)
   radius: 18,
-  largeTop: 250,
 };
 
 export const consoleQrType = {
-  large: 34,
-  largeSub: 24,
-  small: 24,
+  caption: 26,
+};
+
+/** Genres screen: a five-column grid of genre pills, then Continue. */
+export const consoleGenres = {
+  gridTop: 366,
+  cellHeight: 88,
+  gapX: 20,
+  gapY: 20,
+  chipPadX: 26,
+  ring: 4, // focus ring drawn inside the cell, with a gap of ground
+  ringGap: 4,
+  tick: 3, // stroke of the check mark on a chosen genre
+  ctaRing: 9, // the Continue button draws its ring outside its pill
+};
+
+export const consoleGenresType = {
+  chip: 26,
+  sub: 26,
+  count: 30,
+};
+
+/** Favorite films screen: 5-column grid of posters, count line, search. */
+export const consoleFavorites = {
+  columns: 5,
+  // 5 posters fit between the side Back/Done buttons: sideX + 5 * posterWidth + 4 * gapX + sideX = 1920
+  sideX: 140,
+  posterWidth: 296,
+  posterHeight: 418,
+  posterRadius: 14,
+  gapX: 40,
+  gapY: 36,
+  badgeSize: 36,
+  ring: 4,
+  focusScale: 1.04,
+};
+
+export const consoleFavoritesType = {
+  title: 48,
+  sub: 26,
+  count: 26,
+  section: 32,
+  cardTitle: 22,
+  cardMeta: 18,
 };

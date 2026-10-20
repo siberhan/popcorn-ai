@@ -21,3 +21,6 @@ Task briefs from the orchestrator (Claude Code) to the agents in the cmux tabs.
 
 All agents read `rules.md` and `api-contract.md` first. Day 3 TV work also reads `tv-contract.md`. Day 6 work reads `v2-contract.md` first.
 | ajan6 | `ajan6-groq-voice.md` (Day 6) | `briefs/reports/ajan6-groq-voice.md` |
+| ajan2 | `ajan2-profile-edit.md` (Day 7) | `briefs/reports/ajan2-profile-edit.md` |
+| ajan3 | `ajan3-profile-edit.md` (Day 7) | `briefs/reports/ajan3-profile-edit.md` |
+| ajan3 | `ajan3-duel-console.md` (Day 7) | `briefs/reports/ajan3-duel-console.md` |

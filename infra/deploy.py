@@ -1,18 +1,24 @@
-"""Deploy Popcorn AI to AWS Lambda: the MCP server and the agent service, each behind a public Function URL.
+"""Deploy the Popcorn AI MCP server to AWS Lambda, behind a public Function URL.
 
-Both run their normal HTTP server inside Lambda through the Lambda Web Adapter layer.
-The agent URL streams responses (Server-Sent Events for /chat/stream).
+The server runs its normal HTTP server inside Lambda through the Lambda Web Adapter layer. The duel
+catalog it shows (the poster duel never calls TMDB) is built by seeding it through the live URL.
 
-  uv run deploy.py deploy [mcp|agent]   build and update both services, or only the named one
-  uv run deploy.py deploy --force       upload even when nothing changed
-  uv run deploy.py status     print the URLs and check /health
-  uv run deploy.py destroy    delete the functions, URLs, roles and log groups (keeps the DynamoDB table)
-  uv run deploy.py reset      forget the demo household, for a fresh demo (keeps the TMDB cache)
+  uv run deploy.py deploy           build and update the MCP server, delete the v2 leftovers, seed the favorites catalog
+  uv run deploy.py deploy --force   upload even when nothing changed
+  uv run deploy.py status           print the URL and check /health
+  uv run deploy.py seed             build the favorites catalog through the deployed server
+  uv run deploy.py destroy          delete the function, URL, role, log group and v2 leftovers (keeps the DynamoDB table)
+  uv run deploy.py reset            forget the demo household, for a fresh demo (keeps the favorites catalog and TMDB cache)
 
-Caching: the locked dependencies live in a Lambda layer per service (`popcorn-mcp-deps`), published
-again only when `uv export` output changes. The function zip holds only our source and the start
-script, so a code change uploads a few hundred KB. The function description keeps a hash of code and
-settings; when it matches, the function is left alone.
+Caching: the locked dependencies live in a Lambda layer (`popcorn-mcp-deps`), published again only when
+`uv export` output changes. The function zip holds only our source and the start script, so a code change
+uploads a few hundred KB. The function description keeps a hash of code and settings; when it matches,
+the function is left alone.
+
+Deploy and destroy first delete what v2 left in AWS: the `popcorn-agent` function with its URL and log
+group, the `popcorn-agent-role` role, the `popcorn-duel-pools` EventBridge Scheduler schedule and the
+`popcorn-mcp-scheduler-role` role. v3 has no agent and no schedule, so the step is idempotent and a
+resource that is already gone is not an error.
 
 Secrets (TMDB, OpenRouter) are read from the repo's .env and set as Lambda environment variables.
 They are never printed.
@@ -38,9 +44,19 @@ REGION = "eu-north-1"
 PROFILE = "popcorn"
 TABLE = "popcorn-ai"
 HOUSEHOLD = "demo"
+REC_MODEL = "openai/gpt-oss-120b:nitro"  # the picks and spoken-summary model, unless .env names another one
 LWA_LAYER = f"arn:aws:lambda:{REGION}:753240598075:layer:LambdaAdapterLayerArm64:30"  # LWA 1.1.0
 TAGS = {"project": "popcorn-ai"}
 LOG_DAYS = 14
+
+# What v2 left in AWS; v3 has none of it.
+V2_SCHEDULE = "popcorn-duel-pools"
+V2_FUNCTION = "popcorn-agent"
+V2_ROLES = ("popcorn-agent-role", "popcorn-mcp-scheduler-role")
+
+# The favorites catalog is built once: the deploy calls this until built.
+SEED_PAYLOAD = {"popcorn": "seed_catalog"}
+SEED_CALLS = 15
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = Path(__file__).resolve().parent / ".build"
@@ -141,11 +157,12 @@ def source_hash(name: str) -> str:
 # ---------- IAM ----------
 
 
-def ensure_role(name: str, statements: list[dict]) -> str:
-    trust = {
-        "Version": "2012-10-17",
-        "Statement": [{"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}],
-    }
+def ensure_role(name: str, statements: list[dict], service: str = "lambda.amazonaws.com",
+                source_account: str | None = None) -> str:
+    assume = {"Effect": "Allow", "Principal": {"Service": service}, "Action": "sts:AssumeRole"}
+    if source_account:  # only this project may have that service assume the role
+        assume["Condition"] = {"StringEquals": {"aws:SourceAccount": source_account}}
+    trust = {"Version": "2012-10-17", "Statement": [assume]}
     try:
         arn = iam.get_role(RoleName=name)["Role"]["Arn"]
     except iam.exceptions.NoSuchEntityException:
@@ -180,7 +197,7 @@ def ensure_log_group(function: str) -> None:
 # ---------- Lambda ----------
 
 
-def ensure_function(name: str, role_arn: str, code: bytes, env: dict, timeout: int, memory: int, streaming: bool,
+def ensure_function(name: str, role_arn: str, code: bytes, env: dict, timeout: int, memory: int,
                     layer: str, force: bool = False) -> str:
     config = {
         "Role": role_arn,
@@ -221,17 +238,17 @@ def ensure_function(name: str, role_arn: str, code: bytes, env: dict, timeout: i
             lam.get_waiter("function_updated_v2").wait(FunctionName=name)
         changes = [w for w, c in (("code", code_changed), ("config", config_changed)) if c]
         print(f"updated function {name} ({', '.join(changes)})" if changes else f"function {name} unchanged")
-    return ensure_url(name, "RESPONSE_STREAM" if streaming else "BUFFERED")
+    return ensure_url(name)
 
 
-def ensure_url(name: str, invoke_mode: str) -> str:
+def ensure_url(name: str) -> str:
     try:
         url = lam.get_function_url_config(FunctionName=name)
-        if url["InvokeMode"] != invoke_mode:
-            url = lam.update_function_url_config(FunctionName=name, InvokeMode=invoke_mode)
+        if url["InvokeMode"] != "BUFFERED":
+            url = lam.update_function_url_config(FunctionName=name, InvokeMode="BUFFERED")
     except lam.exceptions.ResourceNotFoundException:
         # No CORS here: the apps send their own CORS headers.
-        url = lam.create_function_url_config(FunctionName=name, AuthType="NONE", InvokeMode=invoke_mode)
+        url = lam.create_function_url_config(FunctionName=name, AuthType="NONE", InvokeMode="BUFFERED")
     for sid, extra in (
         ("PublicUrl", {"Action": "lambda:InvokeFunctionUrl", "FunctionUrlAuthType": "NONE"}),
         ("PublicUrlInvoke", {"Action": "lambda:InvokeFunction", "InvokedViaFunctionUrl": True}),
@@ -261,20 +278,110 @@ def health(url: str) -> str:
     return f"FAILED {error}"
 
 
+def delete_function(name: str) -> bool:
+    """Delete a function with its Function URL config and its log group. A missing one is not an error."""
+    found = False
+    for call in (lam.delete_function_url_config, lam.delete_function):
+        try:
+            call(FunctionName=name)
+            found = True
+        except lam.exceptions.ResourceNotFoundException:
+            pass
+    try:
+        logs.delete_log_group(logGroupName=f"/aws/lambda/{name}")
+        found = True
+    except logs.exceptions.ResourceNotFoundException:
+        pass
+    if found:
+        print(f"deleted function {name} (URL and log group too)")
+    return found
+
+
+def delete_role(name: str) -> bool:
+    """Delete a role after removing all its policies. A missing one is not an error."""
+    try:
+        for policy in iam.list_role_policies(RoleName=name)["PolicyNames"]:
+            iam.delete_role_policy(RoleName=name, PolicyName=policy)
+        for policy in iam.list_attached_role_policies(RoleName=name)["AttachedPolicies"]:
+            iam.detach_role_policy(RoleName=name, PolicyArn=policy["PolicyArn"])
+        iam.delete_role(RoleName=name)
+    except iam.exceptions.NoSuchEntityException:
+        return False
+    print(f"deleted role {name}")
+    return True
+
+
+def delete_schedule(name: str) -> bool:
+    """Delete an EventBridge Scheduler schedule. A missing one is not an error."""
+    sched = session.client("scheduler")
+    try:
+        sched.delete_schedule(Name=name, GroupName="default")
+    except sched.exceptions.ResourceNotFoundException:
+        return False
+    print(f"deleted schedule {name}")
+    return True
+
+
+def remove_v2_leftovers() -> None:
+    """Delete what v2 left in AWS; v3 has no agent and no schedule. Idempotent: run by deploy and destroy."""
+    gone = [
+        delete_schedule(V2_SCHEDULE),  # before its role: Scheduler still points at it
+        delete_function(V2_FUNCTION),
+        *(delete_role(role) for role in V2_ROLES),
+    ]
+    print("v2 leftovers removed" if any(gone) else "no v2 leftovers")
+
+
+# ---------- seed ----------
+
+
+def mcp_url() -> str:
+    url = url_of("popcorn-mcp")
+    if not url:
+        raise SystemExit("the MCP server is not deployed: uv run deploy.py deploy")
+    return url
+
+
+def seed_call(url: str) -> dict:
+    """One seed request; a failed call is tried once more, and a second failure stops the seeding."""
+    error = ""
+    for attempt in range(2):
+        try:
+            request = urllib.request.Request(
+                f"{url}/events", data=json.dumps(SEED_PAYLOAD).encode(), method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=300) as response:
+                return json.loads(response.read().decode())
+        except Exception as exc:  # a cold start plus ~20 s of TMDB work; retry once
+            error = repr(exc)
+            time.sleep(2)
+    raise SystemExit(f"seed call failed twice: {error}")
+
+
+def seed(url: str | None = None) -> None:
+    """POST /events until no genre is missing: each call builds for ~20 s and names the genres left."""
+    url = url or mcp_url()
+    for call in range(1, SEED_CALLS + 1):
+        result = seed_call(url)
+        built, remaining = result.get("built") or [], result.get("remaining") or []
+        print(f"seed {call}/{SEED_CALLS}: built {', '.join(built) or '-'} | remaining {', '.join(remaining) or '-'}")
+        if not remaining:
+            print("favorites catalog complete")
+            return
+    raise SystemExit(f"the favorites catalog is still incomplete after {SEED_CALLS} seed calls")
+
+
 # ---------- commands ----------
 
 
-def deploy(targets: list[str], force: bool = False) -> None:
+def deploy(force: bool = False) -> None:
     secrets = read_env()
     account = session.client("sts").get_caller_identity()["Account"]
-    mcp_url = deploy_mcp(account, secrets, force) if "mcp" in targets else url_of("popcorn-mcp")
-    if "agent" in targets:
-        if not mcp_url:
-            raise SystemExit("deploy the MCP server first: uv run deploy.py deploy mcp")
-        agent_url = deploy_agent(account, secrets, mcp_url, force)
-    else:
-        agent_url = None
-    status(mcp_url, agent_url)
+    remove_v2_leftovers()
+    url = deploy_mcp(account, secrets, force)
+    status(url)
+    seed(url)
 
 
 def deploy_mcp(account: str, secrets: dict, force: bool) -> str:
@@ -294,70 +401,31 @@ def deploy_mcp(account: str, secrets: dict, force: bool) -> str:
         "TMDB_API_READ_TOKEN": secrets["TMDB_API_READ_TOKEN"],
         "POPCORN_TABLE": TABLE,
         "POPCORN_HOUSEHOLD": HOUSEHOLD,
+        # The picks and the spoken rating summary; .env may override the default model.
+        "POPCORN_REC_MODEL": secrets.get("POPCORN_REC_MODEL") or REC_MODEL,
         # Speech (ElevenLabs Flash v2.5) and transcription (Whisper Large V3 Turbo) go through OpenRouter.
         "OPENROUTER_API_KEY": secrets["OPENROUTER_API_KEY"],
-    }, timeout=30, memory=512, streaming=False, layer=layer, force=force)
+    }, timeout=30, memory=512, layer=layer, force=force)
 
 
-def deploy_agent(account: str, secrets: dict, mcp_url: str, force: bool) -> str:
-    service_dir = ROOT / "services" / "agent"
-    layer = deps_layer("popcorn-agent", service_dir)
-    code = build("popcorn-agent", service_dir, "popcorn_agent", "run-agent.sh")
-    ensure_log_group("popcorn-agent")
-    agent_role = ensure_role("popcorn-agent-role", [
-        log_statement(account, "popcorn-agent"),
-        {"Effect": "Allow", "Action": "polly:SynthesizeSpeech", "Resource": "*"},
-        {
-            # The household's running conversation (`<household>:session`).
-            "Effect": "Allow",
-            "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"],
-            "Resource": f"arn:aws:dynamodb:{REGION}:{account}:table/{TABLE}",
-        },
-    ])
-    return ensure_function("popcorn-agent", agent_role, code, {
-        "OPENROUTER_API_KEY": secrets["OPENROUTER_API_KEY"],
-        "OPENROUTER_MODEL": secrets.get("OPENROUTER_MODEL") or "openai/gpt-6-luna",
-        "MCP_URL": f"{mcp_url}/mcp",
-        "POPCORN_TABLE": TABLE,
-        "POPCORN_HOUSEHOLD": HOUSEHOLD,
-        "POLLY_VOICE": "Brian",
-        "POLLY_ENGINE": "standard",
-        "AWS_LWA_INVOKE_MODE": "response_stream",
-    }, timeout=120, memory=1024, streaming=True, layer=layer, force=force)
-
-
-def status(mcp_url: str | None = None, agent_url: str | None = None) -> None:
-    for name, url in (("popcorn-mcp", mcp_url or url_of("popcorn-mcp")), ("popcorn-agent", agent_url or url_of("popcorn-agent"))):
-        print(f"{name}: {url or 'not deployed'}")
-        if url:
-            print(f"  /health -> {health(url)}")
+def status(mcp_url: str | None = None) -> None:
+    url = mcp_url or url_of("popcorn-mcp")
+    print(f"popcorn-mcp: {url or 'not deployed'}")
+    if url:
+        print(f"  /health -> {health(url)}")
 
 
 def destroy() -> None:
-    for name in ("popcorn-agent", "popcorn-mcp"):
-        for call in (lam.delete_function_url_config, lam.delete_function):
-            try:
-                call(FunctionName=name)
-            except lam.exceptions.ResourceNotFoundException:
-                pass
-        try:
-            logs.delete_log_group(logGroupName=f"/aws/lambda/{name}")
-        except logs.exceptions.ResourceNotFoundException:
-            pass
-        role = f"{name}-role"
-        try:
-            iam.delete_role_policy(RoleName=role, PolicyName="popcorn")
-            iam.delete_role(RoleName=role)
-        except iam.exceptions.NoSuchEntityException:
-            pass
-        for version in lam.list_layer_versions(LayerName=f"{name}-deps").get("LayerVersions", []):
-            lam.delete_layer_version(LayerName=f"{name}-deps", VersionNumber=version["Version"])
-        print(f"deleted {name}")
+    remove_v2_leftovers()
+    delete_function("popcorn-mcp")
+    delete_role("popcorn-mcp-role")
+    for version in lam.list_layer_versions(LayerName="popcorn-mcp-deps").get("LayerVersions", []):
+        lam.delete_layer_version(LayerName="popcorn-mcp-deps", VersionNumber=version["Version"])
     print(f"kept DynamoDB table {TABLE}")
 
 
 def reset() -> None:
-    """Forget the demo household (profiles, couch, TV state). The TMDB cache stays."""
+    """Forget the demo household (profiles, couch, TV state). The duel catalog and the TMDB cache stay."""
     pages = session.client("dynamodb").get_paginator("scan").paginate(
         TableName=TABLE,
         ProjectionExpression="pk",
@@ -374,17 +442,14 @@ def reset() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["deploy", "status", "destroy", "reset"])
-    parser.add_argument("targets", nargs="*", metavar="mcp|agent", help="deploy only: which services (default both)")
+    parser.add_argument("command", choices=["deploy", "seed", "status", "destroy", "reset"])
     parser.add_argument("--force", action="store_true", help="deploy only: upload even when nothing changed")
     args = parser.parse_args()
-    if set(args.targets) - {"mcp", "agent"} or (args.targets and args.command != "deploy"):
-        parser.error("only deploy takes services, and they are mcp and agent")
     try:
         if args.command == "deploy":
-            deploy(args.targets or ["mcp", "agent"], args.force)
+            deploy(args.force)
         else:
-            {"status": status, "destroy": destroy, "reset": reset}[args.command]()
+            {"seed": seed, "status": status, "destroy": destroy, "reset": reset}[args.command]()
         return 0
     except ClientError as exc:
         print(f"AWS error: {exc}", file=sys.stderr)

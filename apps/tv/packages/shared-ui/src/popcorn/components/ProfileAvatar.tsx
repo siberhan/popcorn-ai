@@ -1,9 +1,15 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
-import { SpatialNavigationFocusableView, SpatialNavigationNodeRef } from 'react-tv-space-navigation';
+import {
+  DefaultFocus,
+  SpatialNavigationFocusableView,
+  SpatialNavigationNode,
+  SpatialNavigationNodeRef,
+} from 'react-tv-space-navigation';
 import { scaledPixels } from '../../hooks/useScale';
 import { consoleColors, consoleLayout, consoleMotion, consoleType } from '../../theme/console';
 import { Member } from '../types';
+import { useBackKey } from './useBackKey';
 import { consoleDiscColorForName, discInitialsForName as discInitials, isChildMember } from './avatarUtils';
 
 type FocusRef = (node: SpatialNavigationNodeRef | null) => void;
@@ -22,13 +28,6 @@ const SIZES: Record<'regular' | 'compact', DiscSize> = {
 const RING = scaledPixels(consoleLayout.ring / consoleLayout.focusScale);
 const NAME_GAP = scaledPixels(28);
 
-/** "Can, 9" for anyone the kid filter cares about (under 17), otherwise the plain name. */
-function displayName(member: Member): string {
-  const age = member.age;
-  if (typeof age === 'number' && (age < 17 || member.kid)) return `${member.name}, ${age}`;
-  return member.name;
-}
-
 type NameTone = 'muted' | 'strong';
 
 interface RoundTileProps {
@@ -37,6 +36,7 @@ interface RoundTileProps {
   compact?: boolean;
   onSelect: () => void;
   onFocus?: () => void;
+  onBlur?: () => void;
   focusRef?: FocusRef;
   renderFace: (size: DiscSize, isFocused: boolean) => React.ReactNode;
   renderOverlay?: (size: DiscSize) => React.ReactNode;
@@ -47,7 +47,7 @@ interface RoundTileProps {
  * a white ring and drops a soft shadow; the name moves down with it. Transform and opacity
  * only, on the native driver. Nothing waits on an end callback (it may not fire on Vega).
  */
-function RoundTile({ label, tone, compact, onSelect, onFocus, focusRef, renderFace, renderOverlay }: RoundTileProps) {
+function RoundTile({ label, tone, compact, onSelect, onFocus, onBlur, focusRef, renderFace, renderOverlay }: RoundTileProps) {
   const focusAnim = useRef(new Animated.Value(0)).current;
   const size = compact ? SIZES.compact : SIZES.regular;
   const lift = (size.disc * (consoleLayout.focusScale - 1)) / 2;
@@ -72,7 +72,10 @@ function RoundTile({ label, tone, compact, onSelect, onFocus, focusRef, renderFa
         animateTo(1);
         onFocus?.();
       }}
-      onBlur={() => animateTo(0)}
+      onBlur={() => {
+        animateTo(0);
+        onBlur?.();
+      }}
     >
       {({ isFocused }) => (
         <View style={[styles.slot, { width: size.disc, marginRight: size.gap }, isFocused ? styles.slotFocused : null]}>
@@ -137,11 +140,85 @@ function KidChip() {
   );
 }
 
+const BUBBLE_GLASS = 'rgba(255, 255, 255, 0.2)';
+
+type BubbleKind = 'edit' | 'delete';
+
+interface BubbleProps {
+  kind: BubbleKind;
+  size: number;
+  onSelect: () => void;
+  onFocus: () => void;
+  onBlur: () => void;
+}
+
+/** A small round button above the avatar: a pencil (edit) or an X (delete). */
+function Bubble({ kind, size, onSelect, onFocus, onBlur }: BubbleProps) {
+  return (
+    <SpatialNavigationFocusableView onSelect={onSelect} onFocus={onFocus} onBlur={onBlur}>
+      {({ isFocused }) => {
+        const glyph = isFocused ? consoleColors.onLight : consoleColors.text;
+        return (
+          <View style={[styles.bubbleRing, isFocused ? styles.bubbleRingFocused : null]}>
+            <View
+              style={[
+                styles.bubble,
+                { width: size, height: size, borderRadius: size / 2 },
+                isFocused ? styles.bubbleFocused : null,
+              ]}
+            >
+              {kind === 'delete' ? (
+                <View style={{ width: size * 0.44, height: size * 0.44 }}>
+                  <View style={[styles.xBar, { backgroundColor: glyph, transform: [{ rotate: '45deg' }] }]} />
+                  <View style={[styles.xBar, { backgroundColor: glyph, transform: [{ rotate: '-45deg' }] }]} />
+                </View>
+              ) : (
+                <View style={{ alignItems: 'center', transform: [{ rotate: '45deg' }] }}>
+                  <View
+                    style={{
+                      width: size * 0.17,
+                      height: size * 0.34,
+                      borderTopLeftRadius: size * 0.04,
+                      borderTopRightRadius: size * 0.04,
+                      backgroundColor: glyph,
+                    }}
+                  />
+                  <View
+                    style={{
+                      width: 0,
+                      height: 0,
+                      borderLeftWidth: size * 0.085,
+                      borderRightWidth: size * 0.085,
+                      borderTopWidth: size * 0.14,
+                      borderLeftColor: 'transparent',
+                      borderRightColor: 'transparent',
+                      borderTopColor: glyph,
+                    }}
+                  />
+                </View>
+              )}
+            </View>
+          </View>
+        );
+      }}
+    </SpatialNavigationFocusableView>
+  );
+}
+
+/** Back on a bubble returns to the avatar; mounted only while a bubble has focus. */
+function BackToAvatar({ onBack }: { onBack: () => void }) {
+  useBackKey(onBack);
+  return null;
+}
+
 export interface ProfileAvatarProps {
   member: Member;
   onCouch: boolean;
   compact?: boolean;
   onToggle: (member: Member) => void;
+  /** Pencil and X bubbles above the focused avatar. Both are needed for the bubbles to show. */
+  onEdit?: (member: Member) => void;
+  onDelete?: (member: Member) => void;
   /** Called with the person's disc colour when the tile takes focus (drives the backdrop tint). */
   onFocusColor?: (color: string) => void;
   focusRef?: FocusRef;
@@ -149,29 +226,126 @@ export interface ProfileAvatarProps {
   discColor?: string;
 }
 
-/** A household member: initials on their disc colour; a white check badge and white name when on the couch. */
-export default function ProfileAvatar({ member, onCouch, compact, onToggle, onFocusColor, focusRef, discColor: discColorProp }: ProfileAvatarProps) {
+/**
+ * A household member: initials on their disc colour; a white check badge and white name when on the couch.
+ * While the avatar (or one of its bubbles) has focus, an edit pencil and a delete X float above the disc.
+ * D-pad: Up from the avatar reaches the pencil, Left/Right switch bubble, Down returns. The bubbles
+ * are absolutely placed, so the row never shifts.
+ */
+export default function ProfileAvatar({
+  member,
+  onCouch,
+  compact,
+  onToggle,
+  onEdit,
+  onDelete,
+  onFocusColor,
+  focusRef,
+  discColor: discColorProp,
+}: ProfileAvatarProps) {
   const discColor = discColorProp ?? consoleDiscColorForName(member.name);
-  return (
+  const size = compact ? SIZES.compact : SIZES.regular;
+  const hasBubbles = Boolean(onEdit && onDelete);
+  const avatarNode = useRef<SpatialNavigationNodeRef | null>(null);
+  const [avatarFocused, setAvatarFocused] = useState(false);
+  const [bubbleFocus, setBubbleFocus] = useState<BubbleKind | null>(null);
+  // When focus last sat inside this group (avatar or a bubble). The group's first child is the
+  // bubble row, so focus arriving from a neighbour lands on a bubble first; that is sent on to the avatar.
+  const lastInside = useRef(0);
+  const touch = () => {
+    lastInside.current = Date.now();
+  };
+  const visible = avatarFocused || bubbleFocus !== null;
+  const fade = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fade, {
+      toValue: visible ? 1 : 0,
+      duration: consoleMotion.focusMs,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [visible, fade]);
+
+  const bubble = Math.round(size.disc * (compact ? 0.4 : 0.32));
+  const lift = (size.disc * (consoleLayout.focusScale - 1)) / 2;
+  const bubbleTop = -(bubble + lift + scaledPixels(22));
+
+  const tile = (
     <RoundTile
-      label={displayName(member)}
+      label={member.name}
       tone={onCouch ? 'strong' : 'muted'}
       compact={compact}
       onSelect={() => onToggle(member)}
-      onFocus={() => onFocusColor?.(discColor)}
-      focusRef={focusRef}
-      renderFace={(size) => (
+      onFocus={() => {
+        setAvatarFocused(true);
+        onFocusColor?.(discColor);
+      }}
+      onBlur={() => {
+        touch();
+        setAvatarFocused(false);
+      }}
+      focusRef={(node) => {
+        avatarNode.current = node;
+        focusRef?.(node);
+      }}
+      renderFace={(sz) => (
         <View style={[styles.face, { backgroundColor: discColor }]}>
-          <Text style={[styles.initials, { fontSize: Math.round(size.disc / 3) }]}>{discInitials(member.name)}</Text>
+          <Text style={[styles.initials, { fontSize: Math.round(sz.disc / 3) }]}>{discInitials(member.name)}</Text>
         </View>
       )}
-      renderOverlay={(size) => (
+      renderOverlay={(sz) => (
         <>
           {isChildMember(member) ? <KidChip /> : null}
-          {onCouch ? <CheckBadge disc={size.disc} /> : null}
+          {onCouch ? <CheckBadge disc={sz.disc} /> : null}
         </>
       )}
     />
+  );
+
+  if (!hasBubbles) return tile;
+
+  const bubbleProps = (kind: BubbleKind, act: () => void) => ({
+    kind,
+    size: bubble,
+    onSelect: act,
+    onFocus: () => {
+      if (Date.now() - lastInside.current > 150) {
+        // Arrived from outside: the avatar comes first. Wait for the focus move to finish.
+        setTimeout(() => avatarNode.current?.focus(), 0);
+        return;
+      }
+      setBubbleFocus(kind);
+    },
+    onBlur: () => {
+      touch();
+      setBubbleFocus((cur) => (cur === kind ? null : cur));
+    },
+  });
+
+  return (
+    <SpatialNavigationNode orientation="vertical">
+      <View style={visible ? styles.groupRaised : null}>
+        {/* Focus order: bubbles first (Up from the avatar), then the avatar itself, which takes default focus. */}
+        <DefaultFocus enable={false}>
+        <SpatialNavigationNode orientation="horizontal">
+          <Animated.View
+            style={[styles.bubbles, { top: bubbleTop, width: size.disc, opacity: fade }]}
+            // Hidden bubbles must not look or act focusable; focus only reaches them from the avatar.
+            pointerEvents="box-none"
+          >
+            <View style={[styles.bubbleRow, bubbleFocus === null ? styles.bubblesDim : null]}>
+              <Bubble {...bubbleProps('edit', () => onEdit?.(member))} />
+              <View style={{ width: scaledPixels(10) }} />
+              <Bubble {...bubbleProps('delete', () => onDelete?.(member))} />
+            </View>
+          </Animated.View>
+        </SpatialNavigationNode>
+        </DefaultFocus>
+        {tile}
+        {bubbleFocus !== null ? <BackToAvatar onBack={() => avatarNode.current?.focus()} /> : null}
+      </View>
+    </SpatialNavigationNode>
   );
 }
 
@@ -215,6 +389,47 @@ const styles = StyleSheet.create({
   },
   slotFocused: {
     zIndex: 2,
+  },
+  groupRaised: {
+    zIndex: 3,
+  },
+  bubbles: {
+    position: 'absolute',
+    left: 0,
+    alignItems: 'center',
+  },
+  bubbleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bubblesDim: {
+    opacity: 0.6,
+  },
+  bubbleRing: {
+    borderRadius: 9999,
+    borderWidth: scaledPixels(4),
+    borderColor: 'transparent',
+    padding: scaledPixels(3),
+  },
+  bubbleRingFocused: {
+    borderColor: consoleColors.ring,
+  },
+  bubble: {
+    backgroundColor: BUBBLE_GLASS,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bubbleFocused: {
+    backgroundColor: consoleColors.text,
+  },
+  xBar: {
+    position: 'absolute',
+    top: '42%',
+    left: 0,
+    right: 0,
+    height: '16%',
+    borderRadius: 9999,
   },
   disc: {
     flex: 1,

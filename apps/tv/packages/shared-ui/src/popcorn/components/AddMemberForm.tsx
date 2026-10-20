@@ -11,11 +11,20 @@ import { consoleColors, consoleLayout, consoleType } from '../../theme/console';
 
 type FocusRef = (node: SpatialNavigationNodeRef | null) => void;
 
+// True while a field is being typed in, and for a moment after: the Back that closes the
+// keyboard must not also close the form.
+let typingNow = false;
+let typingEndedAt = 0;
+const TYPING_GRACE_MS = 600;
+export function formIsTyping(): boolean {
+  return typingNow || Date.now() - typingEndedAt < TYPING_GRACE_MS;
+}
+
 // Web: hide the browser focus outline (the field draws its own). Vega: hide the native underline.
 const webInputReset = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as unknown as TextStyle) : null;
 const keplerInputProps = Platform.OS === 'web' ? {} : { underlineColorKepler: 'transparent' };
 
-interface FormTextFieldProps {
+export interface FormTextFieldProps {
   label: string;
   value: string;
   placeholder: string;
@@ -31,7 +40,7 @@ interface FormTextFieldProps {
  * TextInput (opens the on-screen keyboard on Vega) and locks spatial navigation while typing,
  * so arrows and Enter go to the input. Submit, blur, or the keyboard closing unlocks again.
  */
-function FormTextField({
+export function FormTextField({
   label,
   value,
   placeholder,
@@ -47,6 +56,7 @@ function FormTextField({
   const [editing, setEditing] = useState(false);
 
   const startEditing = () => {
+    typingNow = true;
     if (!lockedRef.current) {
       lockedRef.current = true;
       lock();
@@ -55,6 +65,8 @@ function FormTextField({
   };
 
   const stopEditing = () => {
+    typingNow = false;
+    typingEndedAt = Date.now();
     setEditing(false);
     if (lockedRef.current) {
       lockedRef.current = false;
@@ -77,6 +89,7 @@ function FormTextField({
     });
     return () => {
       sub.remove();
+      typingNow = false;
       if (lockedRef.current) {
         lockedRef.current = false;
         unlock();
@@ -126,17 +139,34 @@ function FormTextField({
 interface FormButtonProps {
   label: string;
   primary?: boolean;
+  /** Still focusable, but nothing happens on OK (e.g. Continue with no genre picked). */
+  disabled?: boolean;
   onSelect: () => void;
   focusRef?: FocusRef;
+  /** A small round button for a one-sign label, e.g. the side ‹ / ✓ of the favorites page. */
+  compact?: boolean;
 }
 
-function FormButton({ label, primary, onSelect, focusRef }: FormButtonProps) {
+export function FormButton({ label, primary, disabled, onSelect, focusRef, compact }: FormButtonProps) {
   return (
-    <SpatialNavigationFocusableView ref={focusRef} onSelect={onSelect}>
+    <SpatialNavigationFocusableView ref={focusRef} onSelect={() => (disabled ? undefined : onSelect())}>
       {({ isFocused }) => (
-        <View style={[styles.buttonRing, isFocused ? styles.buttonRingFocused : null]}>
-          <View style={[styles.button, primary ? styles.buttonPrimary : styles.buttonOutline]}>
-            <Text style={[styles.buttonText, primary ? styles.buttonTextPrimary : null]}>{label}</Text>
+        <View
+          style={[styles.buttonRing, compact ? styles.buttonRingCompact : null, isFocused ? styles.buttonRingFocused : null]}
+        >
+          <View
+            style={[
+              styles.button,
+              compact ? styles.buttonCompact : null,
+              primary ? styles.buttonPrimary : styles.buttonOutline,
+              disabled ? styles.buttonDisabled : null,
+            ]}
+          >
+            <Text
+              style={[styles.buttonText, compact ? styles.buttonTextCompact : null, primary ? styles.buttonTextPrimary : null]}
+            >
+              {label}
+            </Text>
           </View>
         </View>
       )}
@@ -149,15 +179,30 @@ export interface AddMemberFormProps {
   onCancel: () => void;
   /** Ref of the name field's focus node, so the screen can focus it when the form opens. */
   nameFocusRef?: FocusRef;
+  /** Edit mode: start with these values. */
+  initialName?: string;
+  initialAge?: number | null;
+  /** Label of the primary button ("Add" by default). */
+  submitLabel?: string;
+  /** One more action in the button row, e.g. "Edit genres" on the edit view. */
+  secondaryAction?: { label: string; onSelect: () => void };
 }
 
 /**
  * Add a new family member: name (required) + age (optional), all reachable with the D-pad.
  * The screen shows the heading; this draws the fields and buttons only.
  */
-export default function AddMemberForm({ onSubmit, onCancel, nameFocusRef }: AddMemberFormProps) {
-  const [name, setName] = useState('');
-  const [age, setAge] = useState('');
+export default function AddMemberForm({
+  onSubmit,
+  onCancel,
+  nameFocusRef,
+  initialName,
+  initialAge,
+  submitLabel,
+  secondaryAction,
+}: AddMemberFormProps) {
+  const [name, setName] = useState(initialName ?? '');
+  const [age, setAge] = useState(typeof initialAge === 'number' ? String(initialAge) : '');
   const [error, setError] = useState<string | null>(null);
   const nameNode = useRef<SpatialNavigationNodeRef | null>(null);
   const ageNode = useRef<SpatialNavigationNodeRef | null>(null);
@@ -226,7 +271,7 @@ export default function AddMemberForm({ onSubmit, onCancel, nameFocusRef }: AddM
           <SpatialNavigationNode orientation="horizontal">
             <View style={styles.buttonRow}>
               <FormButton
-                label="Add"
+                label={submitLabel || 'Add'}
                 primary
                 onSelect={handleAdd}
                 focusRef={(node) => {
@@ -234,6 +279,9 @@ export default function AddMemberForm({ onSubmit, onCancel, nameFocusRef }: AddM
                 }}
               />
               <FormButton label="Cancel" onSelect={onCancel} />
+              {secondaryAction ? (
+                <FormButton label={secondaryAction.label} onSelect={secondaryAction.onSelect} />
+              ) : null}
             </View>
           </SpatialNavigationNode>
         </View>
@@ -244,6 +292,7 @@ export default function AddMemberForm({ onSubmit, onCancel, nameFocusRef }: AddM
 
 const FIELD_H = scaledPixels(consoleLayout.fieldHeight);
 const BUTTON_H = scaledPixels(72);
+const BUTTON_COMPACT_H = scaledPixels(64);
 const RING_W = scaledPixels(4);
 const RING_GAP = scaledPixels(4);
 
@@ -324,12 +373,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: scaledPixels(40),
   },
+  buttonRingCompact: {
+    marginRight: 0,
+  },
+  buttonCompact: {
+    width: BUTTON_COMPACT_H,
+    height: BUTTON_COMPACT_H,
+    minWidth: 0,
+    borderRadius: BUTTON_COMPACT_H / 2,
+    paddingHorizontal: 0,
+  },
+  buttonTextCompact: {
+    fontSize: scaledPixels(consoleType.name),
+  },
   buttonPrimary: {
     backgroundColor: consoleColors.cta,
   },
   buttonOutline: {
     borderWidth: scaledPixels(2),
     borderColor: consoleColors.outline,
+  },
+  buttonDisabled: {
+    opacity: 0.4,
   },
   buttonText: {
     color: consoleColors.text,
